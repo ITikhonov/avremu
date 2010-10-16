@@ -10,17 +10,17 @@ asm=[]
 def b4(x):
 	return [0xf&(x>>(a*4)) for a in range(4)]
 
-def decode_LDI(x):
+def decode_i4_a4_b4_a4(x):
 	b=b4(x)
 	return 16+b[1],(b[2]<<4)|b[0]
 
-def decode_STS(x,y):
+def decode_i7_5_i4_16(x,y):
 	return y,0x1f&(x>>4)
 
-def decode_SBISCI(x):
+def decode_i8_5_3(x):
 	return (x>>3)&0b11111,x&0b111
 
-def decode_RCALL(x):
+def decode_i4_12(x):
 	return x&0xfff,
 
 def decode_UNDEF(x):
@@ -32,15 +32,15 @@ for x in prog:
 		asm.append((i32[1],i32[0](i32[2],x)))
 		i32=None
 	elif (x>>12)==0b1110:
-		asm.append(('LDI',decode_LDI(x)))
+		asm.append(('LDI',decode_i4_a4_b4_a4(x)))
 	elif (x&0xfe0f)==0b1001001000000000:
-		i32=(decode_STS,'STS',x)
+		i32=(decode_i7_5_i4_16,'STS',x)
 	elif (x&0xff00)==0b1001101000000000:
-		asm.append(('SBI',decode_SBISCI(x)))
+		asm.append(('SBI',decode_i8_5_3(x)))
 	elif (x&0xff00)==0b1001100000000000:
-		asm.append(('SCI',decode_SBISCI(x)))
+		asm.append(('SCI',decode_i8_5_3(x)))
 	elif (x&0xf000)==0b1101000000000000:
-		asm.append(('RCALL',decode_RCALL(x)))
+		asm.append(('RCALL',decode_i4_12(x)))
 	else:
 		asm.append(('UNDEF',x))
 	
