@@ -1,11 +1,4 @@
 
-from sys import argv
-f=open(argv[1]).read()
-
-prog=[(ord(f[i+1])<<8)|ord(f[i]) for i in range(0,len(f),2)]
-
-asm=[]
-
 # bits(x,0/1/2/3)
 def b4(x):
 	return [0xf&(x>>(a*4)) for a in range(4)]
@@ -38,28 +31,36 @@ def decode_i6_s7_i3(x):
 def decode_UNDEF(x):
 	pass
 
-i32=None
-for x in prog:
-	if i32:
-		asm.append((i32[1],i32[0](i32[2],x)))
-		i32=None
-	elif (x>>12)==0b1110: asm.append(('LDI',decode_i4_a4_b4_a4(x)))
-	elif (x&0xfe0f)==0b1001001000000000: i32=(decode_i7_5_i4_16,'STS',x)
-	elif (x&0xff00)==0b1001101000000000: asm.append(('SBI',decode_i8_5_3(x)))
-	elif (x&0xff00)==0b1001100000000000: asm.append(('SCI',decode_i8_5_3(x)))
-	elif (x&0xf000)==0b1101000000000000: asm.append(('RCALL',decode_i4_s12(x)))
-	elif (x&0xf000)==0b1100000000000000: asm.append(('RJMP',decode_i4_s12(x)))
-	elif (x&0xfe0f)==0b1001010000001010: asm.append(('DEC',decode_i7_5_i4(x)))
-	elif (x&0xfc07)==0b1111010000000001: asm.append(('BRNE',decode_i6_s7_i3(x)))
+def load(x):
+	f=open(x).read()
+	prog=[(ord(f[i+1])<<8)|ord(f[i]) for i in range(0,len(f),2)]
+	asm=[]
 
-	elif x==0b1001010100001000: asm.append(('RET',()))
-	elif x==0: asm.append(('NOP',()))
-	else: asm.append(('UNDEF',x))
-	
+	i32=None
+	for x in prog:
+		if i32:
+			asm.append((i32[1],i32[0](i32[2],x)))
+			i32=None
+		elif (x>>12)==0b1110: asm.append(('LDI',decode_i4_a4_b4_a4(x)))
+		elif (x&0xfe0f)==0b1001001000000000: i32=(decode_i7_5_i4_16,'STS',x)
+		elif (x&0xff00)==0b1001101000000000: asm.append(('SBI',decode_i8_5_3(x)))
+		elif (x&0xff00)==0b1001100000000000: asm.append(('SCI',decode_i8_5_3(x)))
+		elif (x&0xf000)==0b1101000000000000: asm.append(('RCALL',decode_i4_s12(x)))
+		elif (x&0xf000)==0b1100000000000000: asm.append(('RJMP',decode_i4_s12(x)))
+		elif (x&0xfe0f)==0b1001010000001010: asm.append(('DEC',decode_i7_5_i4(x)))
+		elif (x&0xfc07)==0b1111010000000001: asm.append(('BRNE',decode_i6_s7_i3(x)))
 
-for x in asm:
-	print '%25s'%(str(x),)
+		elif x==0b1001010100001000: asm.append(('RET',()))
+		elif x==0: asm.append(('NOP',()))
+		else: asm.append(('UNDEF',x))
+	return asm
 
+
+if __name__=='__main__':
+	from sys import argv
+	asm=load(argv[1])
+	for x in asm:
+		print '%25s'%(str(x),)
 
 """
 ADD 	Rd, Rr 	Add without Carry 	RdRd + Rr 	Z,C,N,V,H 	1
