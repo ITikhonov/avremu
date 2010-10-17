@@ -1,4 +1,8 @@
 
+example: decode.py
+	python decode.py example.bin 18e
+
+
 exec: avr.py decode.py blink_slow.bin
 	python avr.py blink_slow.bin
 

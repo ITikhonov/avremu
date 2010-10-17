@@ -31,11 +31,22 @@ def decode_i8_4_4(x):
 def decode_i6_s7_i3(x):
 	return sign(7,(x>>3)&0b1111111),
 
+def decode_i5_a2_b5_a4(x):
+	return ((x>>5)&0b110000)|(x&0b1111),(x>>4)&0b11111
+
+def decode_i7_5(x):
+	return (x>>4)&0b11111
+
+def decode_i4_a4_b4_a4(x):
+	return ((x>>4)&0xf0)|(x&0xf),(x>>4)&0xf
+	
+
 def load(x):
 	f=open(x).read()
 	prog=[(ord(f[i+1])<<8)|ord(f[i]) for i in range(0,len(f),2)]
 	return prog
 
+from os import system
 
 def load_and_decode(name,ignorebefore):
 	prog=load(name)
@@ -43,6 +54,7 @@ def load_and_decode(name,ignorebefore):
 	size=len(prog)
 	while prog:
 		offset=(size-len(prog))*2
+		system('grep "%4x:" %s.dump'%(offset,name[:-4]))
 		x=prog.pop(0)
 		y=decode(x)
 		if not y:
@@ -50,9 +62,9 @@ def load_and_decode(name,ignorebefore):
 			except UnkI:
 				if offset < ignorebefore:
 					continue
-				from os import system
-				system('grep "%4x:" %s.dump'%(offset,name[:-4]))
+				print
 				raise Exception('Unknown %s at %04x'%(bin(x)[2:].zfill(16),offset))
+		print y
 		asm.append(y)
 	return asm
 
@@ -65,6 +77,11 @@ def decode(x):
 	elif (x&0xfe0f)==0b1001010000001010: i=('DEC',decode_i7_5_i4(x))
 	elif (x&0xfc07)==0b1111010000000001: i=('BRNE',decode_i6_s7_i3(x))
 	elif (x&0xff00)==0b0000000100000000: i=('MOVW',decode_i8_4_4(x))
+	elif (x&0xf800)==0b1011100000000000: i=('OUT',decode_i5_a2_b5_a4(x))
+	elif (x&0xfe0f)==0b1001000000000101: i=('LPMZ+',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001001000001101: i=('STX+',decode_i7_5(x))
+
+	elif (x&0xf000)==0b0011000000000000: i=('CPI',decode_i4_a4_b4_a4(x))
 
 	elif x==0b1001010100001000: i=('RET',())
 	elif x==0: i=('NOP',())
