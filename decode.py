@@ -24,12 +24,12 @@ def decode_i4_s12(x):
 def decode_i7_5_i4(x):
 	return (x>>4)&0b11111,
 
+def decode_i8_4_4(x):
+	return (x>>4)&0b1111, x&0b1111
+
 
 def decode_i6_s7_i3(x):
 	return sign(7,(x>>3)&0b1111111),
-
-def decode_UNDEF(x):
-	pass
 
 def load(x):
 	f=open(x).read()
@@ -37,14 +37,22 @@ def load(x):
 	return prog
 
 
-def load_and_decode(x):
-	prog=load(x)
+def load_and_decode(name,ignorebefore):
+	prog=load(name)
 	asm=[]
+	size=len(prog)
 	while prog:
+		offset=(size-len(prog))*2
 		x=prog.pop(0)
 		y=decode(x)
 		if not y:
-			y=decode32(x,prog.pop(0))
+			try: y=decode32(x,prog.pop(0))
+			except UnkI:
+				if offset < ignorebefore:
+					continue
+				from os import system
+				system('grep "%4x:" %s.dump'%(offset,name[:-4]))
+				raise Exception('Unknown %s at %04x'%(bin(x)[2:].zfill(16),offset))
 		asm.append(y)
 	return asm
 
@@ -56,21 +64,26 @@ def decode(x):
 	elif (x&0xf000)==0b1100000000000000: i=('RJMP',decode_i4_s12(x))
 	elif (x&0xfe0f)==0b1001010000001010: i=('DEC',decode_i7_5_i4(x))
 	elif (x&0xfc07)==0b1111010000000001: i=('BRNE',decode_i6_s7_i3(x))
+	elif (x&0xff00)==0b0000000100000000: i=('MOVW',decode_i8_4_4(x))
 
 	elif x==0b1001010100001000: i=('RET',())
 	elif x==0: i=('NOP',())
 	else: i=None
 	return i
 
+class UnkI(Exception):
+	pass
+
 def decode32(x,x1):
 	if (x&0xfe0f)==0b1001001000000000:
 		i=('STS',decode_i7_5_i4_16(x,x1))
-	else: i=('UNDEF',x)
+	else:
+		raise UnkI()
 	return i
 
 if __name__=='__main__':
 	from sys import argv
-	asm=load_and_decode(argv[1])
+	asm=load_and_decode(argv[1],int(argv[2],16))
 	for x in asm:
 		print '%25s'%(str(x),)
 

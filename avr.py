@@ -88,7 +88,7 @@ def avr_RJMP(o):
 def reset():
 	setSP(0x8fe)
 
-verbose=False
+verbose=True
 
 from time import time
 
