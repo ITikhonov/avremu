@@ -10,6 +10,11 @@ asm=[]
 def b4(x):
 	return [0xf&(x>>(a*4)) for a in range(4)]
 
+def sign(n,x):
+	m=(1<<n)
+	if x<(m/2): return x
+	return -(m-x)
+
 def decode_i4_a4_b4_a4(x):
 	b=b4(x)
 	return 16+b[1],(b[2]<<4)|b[0]
@@ -20,8 +25,15 @@ def decode_i7_5_i4_16(x,y):
 def decode_i8_5_3(x):
 	return (x>>3)&0b11111,x&0b111
 
-def decode_i4_12(x):
-	return x&0xfff,
+def decode_i4_s12(x):
+	return sign(12,x&0xfff)
+
+def decode_i7_5_i4(x):
+	return (x>>4)&0b11111,
+
+
+def decode_i6_s7_i3(x):
+	return sign(7,(x>>3)&0b1111111)
 
 def decode_UNDEF(x):
 	pass
@@ -31,18 +43,18 @@ for x in prog:
 	if i32:
 		asm.append((i32[1],i32[0](i32[2],x)))
 		i32=None
-	elif (x>>12)==0b1110:
-		asm.append(('LDI',decode_i4_a4_b4_a4(x)))
-	elif (x&0xfe0f)==0b1001001000000000:
-		i32=(decode_i7_5_i4_16,'STS',x)
-	elif (x&0xff00)==0b1001101000000000:
-		asm.append(('SBI',decode_i8_5_3(x)))
-	elif (x&0xff00)==0b1001100000000000:
-		asm.append(('SCI',decode_i8_5_3(x)))
-	elif (x&0xf000)==0b1101000000000000:
-		asm.append(('RCALL',decode_i4_12(x)))
-	else:
-		asm.append(('UNDEF',x))
+	elif (x>>12)==0b1110: asm.append(('LDI',decode_i4_a4_b4_a4(x)))
+	elif (x&0xfe0f)==0b1001001000000000: i32=(decode_i7_5_i4_16,'STS',x)
+	elif (x&0xff00)==0b1001101000000000: asm.append(('SBI',decode_i8_5_3(x)))
+	elif (x&0xff00)==0b1001100000000000: asm.append(('SCI',decode_i8_5_3(x)))
+	elif (x&0xf000)==0b1101000000000000: asm.append(('RCALL',decode_i4_s12(x)))
+	elif (x&0xf000)==0b1100000000000000: asm.append(('RJMP',decode_i4_s12(x)))
+	elif (x&0xfe0f)==0b1001010000001010: asm.append(('DEC',decode_i7_5_i4(x)))
+	elif (x&0xfc07)==0b1111010000000001: asm.append(('BRNE',decode_i6_s7_i3(x)))
+
+	elif x==0b1001010100001000: asm.append(('RET',()))
+	elif x==0: asm.append(('NOP',()))
+	else: asm.append(('UNDEF',x))
 	
 
 for x in asm:
