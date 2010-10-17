@@ -19,14 +19,14 @@ def decode_i8_5_3(x):
 	return (x>>3)&0b11111,x&0b111
 
 def decode_i4_s12(x):
-	return sign(12,x&0xfff)
+	return sign(12,x&0xfff),
 
 def decode_i7_5_i4(x):
 	return (x>>4)&0b11111,
 
 
 def decode_i6_s7_i3(x):
-	return sign(7,(x>>3)&0b1111111)
+	return sign(7,(x>>3)&0b1111111),
 
 def decode_UNDEF(x):
 	pass
@@ -34,31 +34,43 @@ def decode_UNDEF(x):
 def load(x):
 	f=open(x).read()
 	prog=[(ord(f[i+1])<<8)|ord(f[i]) for i in range(0,len(f),2)]
+	return prog
+
+
+def load_and_decode(x):
+	prog=load(x)
 	asm=[]
-
-	i32=None
-	for x in prog:
-		if i32:
-			asm.append((i32[1],i32[0](i32[2],x)))
-			i32=None
-		elif (x>>12)==0b1110: asm.append(('LDI',decode_i4_a4_b4_a4(x)))
-		elif (x&0xfe0f)==0b1001001000000000: i32=(decode_i7_5_i4_16,'STS',x)
-		elif (x&0xff00)==0b1001101000000000: asm.append(('SBI',decode_i8_5_3(x)))
-		elif (x&0xff00)==0b1001100000000000: asm.append(('SCI',decode_i8_5_3(x)))
-		elif (x&0xf000)==0b1101000000000000: asm.append(('RCALL',decode_i4_s12(x)))
-		elif (x&0xf000)==0b1100000000000000: asm.append(('RJMP',decode_i4_s12(x)))
-		elif (x&0xfe0f)==0b1001010000001010: asm.append(('DEC',decode_i7_5_i4(x)))
-		elif (x&0xfc07)==0b1111010000000001: asm.append(('BRNE',decode_i6_s7_i3(x)))
-
-		elif x==0b1001010100001000: asm.append(('RET',()))
-		elif x==0: asm.append(('NOP',()))
-		else: asm.append(('UNDEF',x))
+	while prog:
+		x=prog.pop(0)
+		y=decode(x)
+		if not y:
+			y=decode32(x,prog.pop(0))
+		asm.append(y)
 	return asm
 
+def decode(x):
+	if (x>>12)==0b1110: i=('LDI',decode_i4_a4_b4_a4(x))
+	elif (x&0xff00)==0b1001101000000000: i=('SBI',decode_i8_5_3(x))
+	elif (x&0xff00)==0b1001100000000000: i=('CBI',decode_i8_5_3(x))
+	elif (x&0xf000)==0b1101000000000000: i=('RCALL',decode_i4_s12(x))
+	elif (x&0xf000)==0b1100000000000000: i=('RJMP',decode_i4_s12(x))
+	elif (x&0xfe0f)==0b1001010000001010: i=('DEC',decode_i7_5_i4(x))
+	elif (x&0xfc07)==0b1111010000000001: i=('BRNE',decode_i6_s7_i3(x))
+
+	elif x==0b1001010100001000: i=('RET',())
+	elif x==0: i=('NOP',())
+	else: i=None
+	return i
+
+def decode32(x,x1):
+	if (x&0xfe0f)==0b1001001000000000:
+		i=('STS',decode_i7_5_i4_16(x,x1))
+	else: i=('UNDEF',x)
+	return i
 
 if __name__=='__main__':
 	from sys import argv
-	asm=load(argv[1])
+	asm=load_and_decode(argv[1])
 	for x in asm:
 		print '%25s'%(str(x),)
 
