@@ -56,10 +56,19 @@ class IO_2b(IO):
 				print ' PORTD%u:%s'%(x,d)
 		_.PORTD=y
 
-class IO_3f(IO):
+class IO_5f(IO):
 	SREG=0
 	def read(_): return _.SREG
-	def write(_,y): _.SREG=y
+	def write(_,y):
+		names='CZNVSHTI'
+		changes=[]
+		for x in range(0,8):
+			m=1<<x
+			if y&m: changes.append(names[x])
+			else: changes.append('_')
+		if changes:
+			print '  SREG:'+(''.join(changes))
+		_.SREG=y
 
 def getIO(x):
 	f=globals().get('IO_%02x'%x)
@@ -117,7 +126,27 @@ def setSP(x):
 	A.MEM[0x5e]=x>>8
 	A.MEM[0x5d]=x&0xff
 
-SREG=0x3F
+class SREG:
+	def __init__(_):
+		s=A.MEM[0x5f]
+		_.H=s&0b00100000
+		_.S=s&0b00010000
+		_.V=s&0b00001000
+		_.N=s&0b00000100
+		_.Z=s&0b00000010
+		_.C=s&0b00000001
+
+def setFLAGS(H=None,V=None,N=None,Z=None,C=None):
+	s=A.MEM[0x5f]
+	if H is not None: s=(s&0b11011111)|(bool(H)<<5)
+	if V is not None: s=(s&0b11110111)|(bool(V)<<3)
+	if N is not None: s=(s&0b11111011)|(bool(N)<<2)
+	if Z is not None: s=(s&0b11111101)|(bool(Z)<<1)
+	if C is not None: s=(s&0b11111110)|(bool(C)<<0)
+
+	s=(s&0b11101111)|((bool(N)^bool(V))<<4) # S
+	A.MEM[0x5f]=s
+
 FZ=2
 
 ###################################################33
@@ -156,13 +185,14 @@ def avr_NOP():
 	return 1
 
 def avr_DEC(reg):
-	A.MEM[reg]-=1
-	if A.MEM[reg]==0: A.MEM[SREG]|=FZ
-	else: A.MEM[SREG]&=~FZ
+	v=A.MEM[reg]-1
+	A.MEM[reg]=v
+	
+	setFLAGS(Z=(v==0),N=(v&0x80),V=(v==0x7f))
 	return 1
 
 def avr_BRNE(o):
-	if A.MEM[SREG]&FZ==0:
+	if not SREG().Z:
 		A.PC+=o
 		return 2
 	return 1
@@ -170,6 +200,12 @@ def avr_BRNE(o):
 def avr_RJMP(o):
 	A.PC+=o
 	return 2
+
+def avr_EOR(o):
+	A.PC+=o
+	return 2
+	
+###################################################33
 	
 ###################################################33
 
