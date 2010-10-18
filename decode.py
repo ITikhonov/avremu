@@ -39,6 +39,29 @@ def decode_i7_5(x):
 
 def decode_i4_a4_b4_a4(x):
 	return ((x>>4)&0xf0)|(x&0xf),(x>>4)&0xf
+
+def decode_i6_a1_b5_a4(x):
+	return ((x>>5)&0x10)|(x&0xf),(x>>4)&0b11111
+
+def decode_i8_a2_b2_a4(x):
+	return ((x>>2)&0xb110000)|(x&0xf),(x>>4)&0b11
+
+def d(p,x):
+	a=0
+	b=0
+	for i in p.split():
+		l=int(i[1:])
+		if i[0]=='a':
+			a=(a<<l)|((x&0xffff)>>(16-l))
+		elif i[0]=='b':
+			b=(b<<l)|((x&0xffff)>>(16-l))
+		x<<=l
+	if 'b' in p: return (a,b)
+	return (a,)
+			
+
+def decode_i2_a1_i1_a2_i1_b5_i1_a3(x):
+	return 
 	
 
 def load(x):
@@ -59,7 +82,7 @@ def load_and_decode(name,ignorebefore):
 		y=decode(x)
 		if not y:
 			try: y=decode32(x,prog.pop(0))
-			except UnkI:
+			except:
 				if offset < ignorebefore:
 					continue
 				print
@@ -75,15 +98,63 @@ def decode(x):
 	elif (x&0xf000)==0b1101000000000000: i=('RCALL',decode_i4_s12(x))
 	elif (x&0xf000)==0b1100000000000000: i=('RJMP',decode_i4_s12(x))
 	elif (x&0xfe0f)==0b1001010000001010: i=('DEC',decode_i7_5_i4(x))
-	elif (x&0xfc07)==0b1111010000000001: i=('BRNE',decode_i6_s7_i3(x))
 	elif (x&0xff00)==0b0000000100000000: i=('MOVW',decode_i8_4_4(x))
 	elif (x&0xf800)==0b1011100000000000: i=('OUT',decode_i5_a2_b5_a4(x))
 	elif (x&0xfe0f)==0b1001000000000101: i=('LPMZ+',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001000000000100: i=('LPMZ',decode_i7_5(x))
+
+
+	elif (x&0xfe0f)==0b1001000000000001: i=('LDZ+',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001000000001100: i=('LDX',decode_i7_5(x))
+	elif (x&0b1101001000001000)==0b1000000000000000: i=('LDDZ',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
+
 	elif (x&0xfe0f)==0b1001001000001101: i=('STX+',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001001000000001: i=('STZ+',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001001000001100: i=('STX',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1000001000001000: i=('STY',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1000001000000000: i=('STZ',decode_i7_5(x))
+	elif (x&0b1101001000001000)==0b1000001000001000: i=('STDY',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
+	elif (x&0b1101001000001000)==0b1000001000000000: i=('STDZ',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
 
 	elif (x&0xf000)==0b0011000000000000: i=('CPI',decode_i4_a4_b4_a4(x))
+	elif (x&0xf000)==0b0111000000000000: i=('ANDI',decode_i4_a4_b4_a4(x))
+	elif (x&0xf000)==0b0110000000000000: i=('ORI',decode_i4_a4_b4_a4(x))
+	elif (x&0xf000)==0b0100000000000000: i=('SBCI',decode_i4_a4_b4_a4(x))
+	elif (x&0xfc00)==0b0000010000000000: i=('CPC',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0001110000000000: i=('ADC',decode_i6_a1_b5_a4(x))
+	elif (x&0xfe0f)==0b1001001000001111: i=('PUSH',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001000000001111: i=('POP',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001010000000110: i=('LSR',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001010000000111: i=('ROR',decode_i7_5_i4(x))
+	elif (x&0xf800)==0b1011000000000000: i=('IN',decode_i5_a2_b5_a4(x))
+	elif (x&0xfc00)==0b0010010000000000: i=('EOR',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0010000000000000: i=('AND',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0000110000000000: i=('ADD',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0001100000000000: i=('SUB',decode_i6_a1_b5_a4(x))
+	elif (x&0xf000)==0b0101000000000000: i=('SUBI',decode_i4_a4_b4_a4(x))
+	elif (x&0xf800)==0b1010100000000000: i=('STS16',decode_i5_a3_b4_a4(x))
+	elif (x&0xff00)==0b1001011100000000: i=('SBIW',decode_i8_a2_b2_a4(x))
+	elif (x&0xfc00)==0b0010110000000000: i=('MOV',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0010100000000000: i=('OR',decode_i6_a1_b5_a4(x))
+	elif (x&0xfc00)==0b0001010000000000: i=('CP',decode_i6_a1_b5_a4(x))
+	elif (x&0xff00)==0b1001011000000000: i=('ADIW',d('i8 a2 b2 a4',x))
+
+	elif (x&0xfe08)==0b1111111000000000: i=('SBRS',d('i7 a5 i1 b3',x))
+	elif (x&0xfe08)==0b1111110000000000: i=('SBRC',d('i7 a5 i1 b3',x))
+
+	elif (x&0xfc07)==0b1111010000000001: i=('BRNE',decode_i6_s7_i3(x))
+	elif (x&0xfc07)==0b1111000000000000: i=('BRCS',decode_i6_s7_i3(x))
+	elif (x&0xfc07)==0b1111000000000001: i=('BREQ',decode_i6_s7_i3(x))
+	elif (x&0xfc07)==0b1111010000000100: i=('BRGE',decode_i6_s7_i3(x))
+	elif (x&0xfc07)==0b1111010000000000: i=('BRCC',decode_i6_s7_i3(x))
+	elif (x&0xfc07)==0b1111010000000010: i=('BRPL',decode_i6_s7_i3(x))
+
 
 	elif x==0b1001010100001000: i=('RET',())
+	elif x==0b1001010100011000: i=('RETI',())
+	elif x==0b1001010000001000: i=('SEC',())
+	elif x==0b1001010001111000: i=('SEI',())
+	elif x==0b1001010011111000: i=('CLI',())
 	elif x==0: i=('NOP',())
 	else: i=None
 	return i
@@ -92,8 +163,8 @@ class UnkI(Exception):
 	pass
 
 def decode32(x,x1):
-	if (x&0xfe0f)==0b1001001000000000:
-		i=('STS',decode_i7_5_i4_16(x,x1))
+	if (x&0xfe0f)==0b1001001000000000: i=('STS',decode_i7_5_i4_16(x,x1))
+	elif (x&0xfe0f)==0b1001000000000000: i=('LDS',decode_i7_5_i4_16(x,x1))
 	else:
 		raise UnkI()
 	return i
