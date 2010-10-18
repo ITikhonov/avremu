@@ -146,6 +146,7 @@ class AVR:
 		_.FLASH=load(argv[1])
 		_.PC=0
 		_.CLOCKS=0
+		_.SKIPNEXT=False
 
 	def store(_):
 		_.oMEM=_.MEM.MEM[:]
@@ -250,6 +251,16 @@ def avr_OUT(a,rr):
 	A.MEM[0x20+a]=A.MEM[rr]
 	return 1
 
+def avr_IN(a,rd):
+	A.MEM[rd]=A.MEM[0x20+a]
+	return 1
+
+def avr_SBRS(rr,b):
+	if rr&(1<<b):
+		A.SKIPNEXT=True
+		return 2
+	return 1
+
 def avr_CPI(k,rd):
 	"""TODO: HalfCarry"""
 	r=A.MEM[rd+0x10]
@@ -326,7 +337,12 @@ while True:
 	y=decode(x); A.PC+=1
 	if not y:
 		y=decode32(x,A.FLASH[A.PC])
+		if A.SKIPNEXT: A.CLOCKS+=1
 		A.PC+=1
+
+	if A.SKIPNEXT:
+		A.SKIPNEXT=False
+		continue
 
 	if verbose: print y
 
