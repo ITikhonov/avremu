@@ -34,9 +34,6 @@ def decode_i6_s7_i3(x):
 def decode_i5_a2_b5_a4(x):
 	return ((x>>5)&0b110000)|(x&0b1111),(x>>4)&0b11111
 
-def decode_i7_5(x):
-	return (x>>4)&0b11111
-
 def decode_i4_a4_b4_a4(x):
 	return ((x>>4)&0xf0)|(x&0xf),(x>>4)&0xf
 
@@ -100,19 +97,19 @@ def decode(x):
 	elif (x&0xfe0f)==0b1001010000001010: i=('DEC',decode_i7_5_i4(x))
 	elif (x&0xff00)==0b0000000100000000: i=('MOVW',decode_i8_4_4(x))
 	elif (x&0xf800)==0b1011100000000000: i=('OUT',decode_i5_a2_b5_a4(x))
-	elif (x&0xfe0f)==0b1001000000000101: i=('LPMZ+',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1001000000000100: i=('LPMZ',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001000000000101: i=('LPMZP',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001000000000100: i=('LPMZ',decode_i7_5_i4(x))
 
 
-	elif (x&0xfe0f)==0b1001000000000001: i=('LDZ+',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1001000000001100: i=('LDX',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001000000000001: i=('LDZP',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001000000001100: i=('LDX',decode_i7_5_i4(x))
 	elif (x&0b1101001000001000)==0b1000000000000000: i=('LDDZ',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
 
-	elif (x&0xfe0f)==0b1001001000001101: i=('STX+',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1001001000000001: i=('STZ+',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1001001000001100: i=('STX',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1000001000001000: i=('STY',decode_i7_5(x))
-	elif (x&0xfe0f)==0b1000001000000000: i=('STZ',decode_i7_5(x))
+	elif (x&0xfe0f)==0b1001001000001101: i=('STXP',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001001000000001: i=('STZP',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1001001000001100: i=('STX',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1000001000001000: i=('STY',decode_i7_5_i4(x))
+	elif (x&0xfe0f)==0b1000001000000000: i=('STZ',decode_i7_5_i4(x))
 	elif (x&0b1101001000001000)==0b1000001000001000: i=('STDY',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
 	elif (x&0b1101001000001000)==0b1000001000000000: i=('STDZ',d('i2 a1 i1 a2 i1 b5 i1 a3',x))
 

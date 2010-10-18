@@ -16,11 +16,13 @@ class IO_5e(IO):
 	"SPH"
 	def read(_): return _.sp
 	def write(_,y): _.sp=y
+	def log(_,y): pass
 
 class IO_5d(IO):
 	"SPL"
 	def read(_): return _.sp
 	def write(_,y): _.sp=y
+	def log(_,y): pass
 
 class IO_61(IO):
 	CLKPR=0
@@ -70,6 +72,40 @@ class IO_5f(IO):
 			print '  SREG:'+(''.join(changes))
 		_.SREG=y
 
+class IO_d7(IO):
+	UHWCON=0
+	def read(_): return _.UHWCON
+	def write(_,y):
+		if y&1!=_.UHWCON&1:
+			print '  USB Pad Regulator:',['DISABLED','ENABLED'][y&1]
+		_.UHWCON=y
+
+def rb(n,y,x,name,on='ENABLED',off='DISABLED'):
+	m=1<<n
+	if y&m!=x&m:
+		if y&m: s=on
+		else: s=off
+		print '  %s: %s'%(name,s)
+
+class IO_d8(IO):
+	USBCON=0b00100000
+	def read(_): return _.USBCON
+	def write(_,y):
+		rb(7,y,_.USBCON,'USB')
+		rb(5,y,_.USBCON,'USB CLOCK','FREEZED','ENABLED')
+		rb(4,y,_.USBCON,'USB VBUS PAD')
+		rb(0,y,_.USBCON,'USB VBUS INT')
+		_.USBCON=y
+				
+class IO_49(IO):
+	PLLCSR=0
+	def read(_): return _.PLLCSR
+	def write(_,y):
+		rb(4,y,_.PLLCSR,'PLL Prescaler','1:1','1:2')
+		rb(1,y,_.PLLCSR,'PLL')
+		_.PLLCSR=y
+		
+
 def getIO(x):
 	f=globals().get('IO_%02x'%x)
 	if f: return f(x)
@@ -82,7 +118,7 @@ print AVRIO[0x5e-0x20]
 class AVRMEM:
 	def __init__(_):
 		_.REG=[0]*0x20
-		_.MEM=[0]*2048
+		_.MEM=[0]*0xa00
 
 	def __getitem__(_,x):
 		if x<0x20: return _.REG[x]
@@ -97,7 +133,10 @@ class AVRMEM:
 			print "  [%04x]=%02x"%(x,y)
 			_.MEM[x-0x100]=y
 		else:
-			#print "  IO%02x=%02x"%(x,y)
+			if getattr(AVRIO[x-0x20],'log',None):
+				AVRIO[x-0x20].log(y)
+			else:
+				print "  IO%02x=%02x"%(x,y)
 			AVRIO[x-0x20].write(y)
 		
 
@@ -129,12 +168,12 @@ def setSP(x):
 class SREG:
 	def __init__(_):
 		s=A.MEM[0x5f]
-		_.H=s&0b00100000
-		_.S=s&0b00010000
-		_.V=s&0b00001000
-		_.N=s&0b00000100
-		_.Z=s&0b00000010
-		_.C=s&0b00000001
+		_.H=bool(s&0b00100000)
+		_.S=bool(s&0b00010000)
+		_.V=bool(s&0b00001000)
+		_.N=bool(s&0b00000100)
+		_.Z=bool(s&0b00000010)
+		_.C=bool(s&0b00000001)
 
 def setFLAGS(H=None,V=None,N=None,Z=None,C=None):
 	s=A.MEM[0x5f]
@@ -201,9 +240,71 @@ def avr_RJMP(o):
 	A.PC+=o
 	return 2
 
-def avr_EOR(o):
-	A.PC+=o
+def avr_EOR(rr,rd):
+	v=(A.MEM[rr]^A.MEM[rd])&0xff
+	A.MEM[rd]=v
+	setFLAGS(Z=(v==0),N=(v&0x80),V=0)
+	return 1
+
+def avr_OUT(a,rr):
+	A.MEM[0x20+a]=A.MEM[rr]
+	return 1
+
+def avr_CPI(k,rd):
+	"""TODO: HalfCarry"""
+	r=A.MEM[rd+0x10]
+	v=(r-k)&0xff
+
+	Rd7=r>>6
+	K7=k>>6
+	R7=v>>6
+
+	setFLAGS(	C=((not Rd7)&K7)or(K7&R7)or(R7&(not Rd7)),
+			N=R7,
+			Z=(v==0),
+			V=(Rd7&(not K7)&(not R7))or((not Rd7)&K7&R7))
+	return 1
+
+def avr_CPC(rr,rd):
+	"""TODO: HalfCarry"""
+	r=A.MEM[rr]
+	d=A.MEM[rd]
+	v=(d-r-SREG().C)&0xff
+
+	Rd7=d>>6
+	Rr7=r>>6
+	R7=v>>6
+
+	setFLAGS(	C=((not Rd7)&Rr7)or(Rr7&R7)or(R7&(not Rd7)),
+			N=R7,
+			Z=(v==0)&SREG().Z,
+			V=(Rd7&(not Rr7)&(not R7))or((not Rd7)&Rr7&R7))
+	return 1
+
+def avr_LPMZP(rd):
+	Z=(A.MEM[0x1f]<<8)|A.MEM[0x1e]
+	u16=A.FLASH[Z/2]
+	if Z&1: A.MEM[rd]=(u16>>8)&0xff
+	else: A.MEM[rd]=u16&0xff
+	Z+=1
+	A.MEM[0x1e]=Z&0xff
+	A.MEM[0x1f]=(Z>>8)&0xff
+	return 3
+
+def avr_STXP(rd):
+	X=(A.MEM[0x1b]<<8)|A.MEM[0x1a]
+	A.MEM[X]=rd
+	X+=1
+	A.MEM[0x1a]=X&0xff
+	A.MEM[0x1b]=(X>>8)&0xff
 	return 2
+
+def avr_PUSH(rr):
+	sp=getSP()
+	A.MEM[sp]=A.MEM[rr]
+	setSP(sp-1)
+	return 2
+	
 	
 ###################################################33
 	

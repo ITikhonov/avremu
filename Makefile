@@ -1,4 +1,7 @@
 
+example.exec: avr.py decode.py example.bin
+	python avr.py example.bin
+
 exec: avr.py decode.py blink_slow.bin
 	python avr.py blink_slow.bin
 
