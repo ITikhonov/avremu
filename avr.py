@@ -1,4 +1,6 @@
 
+verbose=False
+
 from sys import argv
 from decode import load,decode,decode32
 
@@ -60,15 +62,18 @@ class IO_2b(IO):
 
 class IO_5f(IO):
 	SREG=0
+	def log(_,y): pass
 	def read(_): return _.SREG
 	def write(_,y):
 		names='CZNVSHTI'
 		changes=[]
+		changed=False
 		for x in range(0,8):
 			m=1<<x
+			if y&m!=_.SREG&m: changed=True
 			if y&m: changes.append(names[x])
 			else: changes.append('_')
-		if changes:
+		if changed:
 			print '  SREG:'+(''.join(changes))
 		_.SREG=y
 
@@ -154,7 +159,7 @@ class AVRMEM:
 
 	def __setitem__(_,x,y):
 		if x<0x20:
-			print "  r%u=%02x"%(x,y)
+			if verbose: print "  r%u=%02x"%(x,y)
 			_.REG[x]=y
 		elif x>0xff:
 			print "  [%04x]=%02x"%(x,y)
@@ -276,6 +281,12 @@ def avr_BRNE(o):
 		return 2
 	return 1
 
+def avr_BREQ(o):
+	if SREG().Z:
+		A.PC+=o
+		return 2
+	return 1
+
 def avr_RJMP(o):
 	A.PC+=o
 	return 2
@@ -354,6 +365,35 @@ def avr_PUSH(rr):
 	A.MEM[sp]=A.MEM[rr]
 	setSP(sp-1)
 	return 2
+
+def avr_SEI():
+	A.MEM[0x5f]|=0x80
+	return 1
+
+def avr_LDS(rd,k):
+	A.MEM[rd]=A.MEM[k]
+	return 2
+
+def avr_AND(rr,rd):
+	v=A.MEM[rd]&A.MEM[rr]
+	A.MEM[rd]=v
+	setFLAGS(Z=(v==0),N=(v&0x80),V=0)
+	return 1
+
+def avr_MOVW(rd,rr):
+	A.MEM[rd*2]=A.MEM[rr*2]
+	A.MEM[rd*2+1]=A.MEM[rr*2+1]
+	return 1
+
+def avr_SBIW(k,rd):
+	r=24+rd*2
+	d=A.MEM[r]|(A.MEM[r+1]<<8)
+	v=(d-k)&0xffff
+	A.MEM[r]=v&0xff
+	A.MEM[r+1]=v>>8
+	setFLAGS(Z=(v==0),N=(v&0x8000),V=(d>>15)&(not (v>>15)),C=(v>>15)&(not (d>>15)))
+	return 2
+	
 	
 	
 ###################################################33
@@ -363,7 +403,6 @@ def avr_PUSH(rr):
 def reset():
 	setSP(0x8fe)
 
-verbose=True
 
 from time import time
 
