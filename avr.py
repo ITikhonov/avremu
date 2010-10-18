@@ -110,6 +110,28 @@ class IO_49(IO):
 	def plllock(_):
 		_.PLLCSR|=1
 		
+class IO_e0(IO):
+	UDCON=1
+	def read(_): return _.UDCON
+	def write(_,y):
+		rb(3,y,_.UDCON,'USB Reset CPU')
+		rb(2,y,_.UDCON,'USB Low Speed')
+		rb(1,y,_.UDCON,'USB Remote Wake-up','SEND','WTF')
+		rb(0,y,_.UDCON,'USB Detach')
+		_.UDCON=y
+
+class IO_e2(IO):
+	UDIEN=1
+	def read(_): return _.UDIEN
+	def write(_,y):
+		rb(6,y,_.UDIEN,'USB UPRSMI')
+		rb(5,y,_.UDIEN,'USB EORSMI')
+		rb(4,y,_.UDIEN,'USB WAKEUPI')
+		rb(3,y,_.UDIEN,'USB EORSTI')
+		rb(2,y,_.UDIEN,'USB SOFI')
+		rb(0,y,_.UDIEN,'USB SUSPI')
+		_.UDIEN=y
+
 
 def getIO(x):
 	f=globals().get('IO_%02x'%x)
