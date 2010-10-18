@@ -96,14 +96,19 @@ class IO_d8(IO):
 		rb(4,y,_.USBCON,'USB VBUS PAD')
 		rb(0,y,_.USBCON,'USB VBUS INT')
 		_.USBCON=y
-				
+
 class IO_49(IO):
 	PLLCSR=0
 	def read(_): return _.PLLCSR
 	def write(_,y):
 		rb(4,y,_.PLLCSR,'PLL Prescaler','1:1','1:2')
 		rb(1,y,_.PLLCSR,'PLL')
+		if y&2:
+			A.schedule(100,_.plllock,())
 		_.PLLCSR=y
+
+	def plllock(_):
+		_.PLLCSR|=1
 		
 
 def getIO(x):
@@ -147,6 +152,18 @@ class AVR:
 		_.PC=0
 		_.CLOCKS=0
 		_.SKIPNEXT=False
+		_.sched=[]
+
+	def schedule(_,ms,func,args):
+		_.sched.append((_.CLOCKS+ms,func,args))
+		_.sched.sort(key=lambda x:x[0])
+		print _.sched
+
+	def run(_):
+		while _.sched and _.sched[0][0]<=_.CLOCKS:
+			(t,f,a)=_.sched.pop(0)
+			print 'run',t,f,a
+			f(*a)
 
 	def store(_):
 		_.oMEM=_.MEM.MEM[:]
@@ -256,7 +273,7 @@ def avr_IN(a,rd):
 	return 1
 
 def avr_SBRS(rr,b):
-	if rr&(1<<b):
+	if A.MEM[rr]&(1<<b):
 		A.SKIPNEXT=True
 		return 2
 	return 1
@@ -332,8 +349,9 @@ reset()
 
 start=time()
 while True:
+	A.run()
 	x=A.FLASH[A.PC]
-	if verbose: print '%04x:'%(A.PC*2,),
+	if verbose: print '(%08u %04x:'%(A.CLOCKS,A.PC*2,),
 	y=decode(x); A.PC+=1
 	if not y:
 		y=decode32(x,A.FLASH[A.PC])
@@ -341,6 +359,7 @@ while True:
 		A.PC+=1
 
 	if A.SKIPNEXT:
+		print 'SKIP'
 		A.SKIPNEXT=False
 		continue
 
