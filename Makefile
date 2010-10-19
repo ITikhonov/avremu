@@ -1,3 +1,14 @@
+CFLAGS=-Wall
+
+run: avr
+	./avr
+
+avr: avr.o
+
+avr.o: avr.c decode.inc
+
+decode.inc: inst.table gendecode.py
+	python gendecode.py
 
 example.exec: avr.py decode.py example.bin
 	python avr.py example.bin
