@@ -19,7 +19,8 @@ decode.insert(1,('avr_inst inst_funcs[]={avr_UNIMPL,avr_')+(',avr_'.join(enum))+
 
 def make_decoder(p):
 	v=p.split('_')
-	if 'D' in p: return
+	if v[0]=='D': v.pop(0)
+		
 
 	args=[]
 	pos=16

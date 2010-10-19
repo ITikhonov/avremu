@@ -5,10 +5,13 @@ run: avr
 
 avr: avr.o
 
-avr.o: avr.c decode.inc
+avr.o: avr.c decode.inc io.inc
 
 decode.inc: inst.table gendecode.py
 	python gendecode.py
+
+io.inc:
+	python genio.py
 
 example.exec: avr.py decode.py example.bin
 	python avr.py example.bin

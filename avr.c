@@ -5,9 +5,15 @@
 
 #include <stdio.h>
 
+#undef NDEBUG
+#include <assert.h>
+
 uint8_t mem[0xb00];
 uint16_t flash[0x4000];
 uint16_t pc;
+
+typedef void (*io_read_func)(uint8_t a);
+typedef void (*io_write_func)(uint8_t a,uint8_t x);
 
 void load() {
 	int f=open("blink_slow.bin",O_RDONLY);
@@ -18,10 +24,57 @@ void reset() {
 	pc=0;
 }
 
-void setreg(int r, uint8_t v) {
+/**************************************************************/
+
+#include "ioundef.inc"
+
+#undef avr_IOW61
+void avr_IOW61(uint8_t a,uint8_t x) {
+	if(x==0x80) { printf("  CLKPCE\n"); }
+	else { printf("  CLKPS:%x\n",1<<(x&0xf)); }
+	mem[0x61]=x;
+}
+
+#include "io.inc"
+
+/**************************************************************/
+
+void setreg(unsigned int r, uint8_t v) {
+	assert(r<0x20);
 	mem[r]=v;
 	printf("  r%u=%02x\n",r,v);
 }
+
+void setio(unsigned int addr, uint8_t v) {
+	assert(addr>0x1f&&addr<0x100);
+	if(io_write_funcs[addr-0x20]) {
+		io_write_funcs[addr-0x20](addr,v);
+	} else {
+		printf("io write %04x=0x%02x is not implemented\n",addr,v);
+		abort();
+	}
+}
+
+void setmem(unsigned int addr,uint8_t v) {
+	if(addr<0x20) { setreg(addr,v); }
+	else if(addr<0x100) { setio(addr,v); }
+	else if(addr<0x4000) {
+		mem[addr]=v;
+		printf("  [%04x]=%02x\n",addr,v);
+	} else {
+		printf("address [%04x]=%02x above available memory\n",addr,v);
+		abort();
+	}
+}
+
+/**************************************************************/
+
+uint8_t reg(unsigned int x) {
+	assert(x<0x20);
+	return mem[x];
+}
+
+/**************************************************************/
 
 typedef int (*avr_inst)(uint16_t);
 
@@ -32,8 +85,12 @@ int avr_LDI(uint16_t i) {
         return 1;
 }
 
+int avr_STS(uint16_t i) {
+	setmem(flash[pc],reg(ARG_STS_A));
+        return 2;
+}
+
 #define avr_UNIMPL (0)
-#define avr_STS avr_UNIMPL
 #define avr_LDS avr_UNIMPL
 #define avr_SBI avr_UNIMPL
 #define avr_CBI avr_UNIMPL
