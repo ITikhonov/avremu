@@ -28,11 +28,35 @@ void reset() {
 
 #include "ioundef.inc"
 
+#undef avr_IOW2a
+void avr_IOW2a(uint8_t a,uint8_t x) {
+	uint8_t o=mem[a];
+	int m=1,n=0;
+	for(;n<8;m<<=1,n++) {
+		if((x&m)!=(o&m)) { printf("  DDRD%u: %s\n",n,(x&m)?"OUT":"IN"); }
+	}
+	mem[a]=x;
+}
+
+#undef avr_IOW2b
+void avr_IOW2b(uint8_t a,uint8_t x) {
+	uint8_t o=mem[a];
+	uint8_t DDRD=mem[0x2a];
+	int m=1,n=0;
+	for(;n<8;m<<=1,n++) {
+		if((x&m)!=(o&m)) {
+			assert(DDRD&m);
+			printf("  PORTD%u: %s\n",n,(x&m)?"HIGH":"LOW");
+		}
+	}
+	mem[a]=x;
+}
+
 #undef avr_IOW61
 void avr_IOW61(uint8_t a,uint8_t x) {
 	if(x==0x80) { printf("  CLKPCE\n"); }
 	else { printf("  CLKPS:%x\n",1<<(x&0xf)); }
-	mem[0x61]=x;
+	mem[a]=x;
 }
 
 #include "io.inc"
@@ -90,10 +114,18 @@ int avr_STS(uint16_t i) {
         return 2;
 }
 
+int avr_SBI(uint16_t i) {
+	setmem(ARG_SBI_A+0x20,mem[ARG_SBI_A+0x20]|(1<<ARG_SBI_B));
+	return 2;
+}
+
+int avr_CBI(uint16_t i) {
+	setmem(ARG_SBI_A+0x20,mem[ARG_SBI_A+0x20]&(~(1<<ARG_SBI_B)));
+	return 2;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
-#define avr_SBI avr_UNIMPL
-#define avr_CBI avr_UNIMPL
 #define avr_RCALL avr_UNIMPL
 #define avr_RJMP avr_UNIMPL
 #define avr_DEC avr_UNIMPL
@@ -147,6 +179,8 @@ int avr_STS(uint16_t i) {
 #define avr_SEI avr_UNIMPL
 #define avr_CLI avr_UNIMPL
 #define avr_NOP avr_UNIMPL
+
+/**************************************************************/
 
 #include "decode.inc"
 
