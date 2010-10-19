@@ -2,6 +2,8 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <stdarg.h>
 
 #include <stdio.h>
 
@@ -11,6 +13,7 @@
 uint8_t mem[0xb00];
 uint16_t flash[0x4000];
 uint16_t pc;
+uint32_t clocks;
 
 typedef void (*io_read_func)(uint8_t a);
 typedef void (*io_write_func)(uint8_t a,uint8_t x);
@@ -20,9 +23,17 @@ void load() {
 	read(f,&flash,sizeof(flash));
 }
 
-void reset() {
-	pc=0;
+#ifdef VERBOSE
+void LOG(char *fmt,...) {
+	va_list ap;
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
 }
+#else 
+#define LOG(...) ;
+#endif
+
 
 /**************************************************************/
 
@@ -66,7 +77,7 @@ void avr_IOW61(uint8_t a,uint8_t x) {
 void setreg(unsigned int r, uint8_t v) {
 	assert(r<0x20);
 	mem[r]=v;
-	printf("  r%u=%02x\n",r,v);
+	LOG("  r%u=%02x\n",r,v);
 }
 
 void setio(unsigned int addr, uint8_t v) {
@@ -84,19 +95,58 @@ void setmem(unsigned int addr,uint8_t v) {
 	else if(addr<0x100) { setio(addr,v); }
 	else if(addr<0x4000) {
 		mem[addr]=v;
-		printf("  [%04x]=%02x\n",addr,v);
+		LOG("  [%04x]=%02x\n",addr,v);
 	} else {
 		printf("address [%04x]=%02x above available memory\n",addr,v);
 		abort();
 	}
 }
 
+void setZ(int x) { mem[0x5f]&=~0x02; if(x) mem[0x5f]|=0x02; }
+void setNV(int n,int v) {
+	mem[0x5f]&=~0x04; if(n) mem[0x5f]|=0x04;
+	mem[0x5f]&=~0x08; if(v) mem[0x5f]|=0x08;
+	if((n||v)&&(!(n&&v))) {
+		mem[0x5f]&=~0x10; if(n) mem[0x5f]|=0x10;
+	}
+}
+
+void setsp(uint16_t x) {
+	mem[0x5e]=x>>8;
+	mem[0x5d]=x&0xff;
+}
+
 /**************************************************************/
+
+uint16_t sp() {
+	return (mem[0x5e]<<8)|mem[0x5d];
+}
 
 uint8_t reg(unsigned int x) {
 	assert(x<0x20);
 	return mem[x];
 }
+
+int getZ() { return mem[0x5f]&2; }
+
+/**************************************************************/
+
+#ifdef VERBOSE
+void dumpSREG() {
+	uint8_t s=mem[0x5f];
+	LOG("  SREG:%c%c%c%c%c%c%c%c\n",
+		(s&0x80)?'I':'_',
+		(s&0x40)?'T':'_',
+		(s&0x20)?'H':'_',
+		(s&0x10)?'S':'_',
+		(s&0x08)?'V':'_',
+		(s&0x04)?'N':'_',
+		(s&0x02)?'Z':'_',
+		(s&0x01)?'C':'_');
+}
+#else
+#define dumpSREG() ;
+#endif
 
 /**************************************************************/
 
@@ -124,11 +174,54 @@ int avr_CBI(uint16_t i) {
 	return 2;
 }
 
+int avr_NOP(uint16_t i) {
+	return 1;
+}
+
+int avr_DEC(uint16_t i) {
+	int r=ARG_DEC_A;
+	uint8_t v;
+        setreg(r,v=reg(r)-1);
+        
+        setZ(v==0);
+	setNV(v&0x80,v==0x7f);
+	dumpSREG();
+
+	return 1;
+}
+
+int avr_RCALL(uint16_t i) {
+        uint16_t p=sp();
+        mem[p]=pc&0xff;
+        mem[p-1]=pc>>8;
+        setsp(p-2);
+        pc+=ARG_RCALL_A;
+        return 3;
+}
+
+int avr_BRNE(uint16_t i) {
+	dumpSREG();
+        if (!getZ()) {
+                pc+=ARG_BRNE_A;
+                return 2;
+	}
+        return 1;
+}
+
+int avr_RJMP(uint16_t i) {
+	pc+=ARG_RJMP_A;
+	return 2;
+}
+
+int avr_RET(uint16_t i) {
+        uint16_t p=sp();
+        pc=(mem[p+1]<<8)|mem[p+2];
+        setsp(p+2);
+        return 4;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
-#define avr_RCALL avr_UNIMPL
-#define avr_RJMP avr_UNIMPL
-#define avr_DEC avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
 #define avr_OUT avr_UNIMPL
 #define avr_LPMZP avr_UNIMPL
@@ -167,25 +260,36 @@ int avr_CBI(uint16_t i) {
 #define avr_ADIW avr_UNIMPL
 #define avr_SBRS avr_UNIMPL
 #define avr_SBRC avr_UNIMPL
-#define avr_BRNE avr_UNIMPL
 #define avr_BRCS avr_UNIMPL
 #define avr_BREQ avr_UNIMPL
 #define avr_BRGE avr_UNIMPL
 #define avr_BRCC avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
-#define avr_RET avr_UNIMPL
 #define avr_RETI avr_UNIMPL
 #define avr_SEC avr_UNIMPL
 #define avr_SEI avr_UNIMPL
 #define avr_CLI avr_UNIMPL
-#define avr_NOP avr_UNIMPL
 
 /**************************************************************/
 
 #include "decode.inc"
 
+double floattime() {
+	struct timeval t;
+	gettimeofday(&t,0);
+	return t.tv_sec+(t.tv_usec*1e-6);
+}
+
 void run() {
+	double start=floattime();
 	for(;;) {
+		LOG("%4x (%u):",pc*2,clocks);
+		if(clocks==8000000) {
+			double now=floattime();
+			printf("## %u clocks per %0.3lf seconds\n",clocks,now-start);
+			start=now; clocks=0;
+		}
+
 		uint16_t i=flash[pc];
 		int f=decode(i);
 		if(f==INST_UNKNOWN) {
@@ -199,9 +303,9 @@ void run() {
 			f=-f;
 			pc++;
 		}
-		printf("%s\n",inst_names[f]);
+		LOG("%s\n",inst_names[f]);
 		if(inst_funcs[f]) {
-			inst_funcs[f](i);
+			clocks+=inst_funcs[f](i);
 		} else {
 			printf("instruction %s (%04x at %04x) not implemented\n",inst_names[f],i,pc*2);
 			char buf[1024];
@@ -211,6 +315,12 @@ void run() {
 		}
 		pc++;
 	}
+}
+
+void reset() {
+	setsp(0xaff);
+	pc=0;
+	clocks=0;
 }
 
 int main() {

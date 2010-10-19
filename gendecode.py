@@ -65,7 +65,10 @@ def translate_decoder(pre,d):
 			r="#define ARG_%s_%s ((((i>>%u)&0x%x)<<%u)|(((i>>%u)&0x%x)<<%u)|((i>>%u)&0x%x))"%(pre,n,ash,am,bw,bsh,bm,cw,csh,cm)
 		else:
 			sign,shift,mask,w=x[0]
-			r="#define ARG_%s_%s ((i>>%u)&0x%x)"%(pre,n,shift,mask)
+			if sign=='s':
+				r="#define ARG_%s_%s ( ((int32_t)((0-((i>>%u)&1))<<7)) | ((i>>%u)&0x%x) )"%(pre,n,shift+w-1,shift,mask)
+			else:
+				r="#define ARG_%s_%s ((i>>%u)&0x%x)"%(pre,n,shift,mask)
 		args.append(r)
 	return args
 			
