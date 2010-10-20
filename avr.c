@@ -45,11 +45,27 @@ void rb(int bit,uint8_t n,uint8_t o,char *name,char *on, char *off) {
 	}
 }
 
+void rb0(int bit,uint8_t n,char *name,char *on, char *off) {
+	int m=1<<bit;
+	printf("  %s: %s\n",name,(n&m)?on:off);
+}
+
+void rl(int bit,uint8_t n,char *name) {
+	int m=1<<bit;
+	if(n&m) {
+		printf("  %s\n",name);
+	}
+}
+
 
 /**************************************************************/
 
 void setI(int);
 void push16(uint16_t);
+
+struct {
+	uint8_t eb,ec,ed,f0;
+} sim_usb_ep[6];
 
 void sim_usb_initspeed() {
 	printf("!! USB INIT SPEED\n");
@@ -130,6 +146,52 @@ void avr_IOW2b(uint8_t a,uint8_t x) {
 		}
 	}
 	mem[a]=x;
+}
+
+#undef avr_IOWe9
+void avr_IOWe9(uint8_t a,uint8_t x) {
+	printf("  USB SELECT: EP%u\n", x&7);
+	mem[a]=x;
+}
+
+
+#undef avr_IOWeb
+void avr_IOWeb(uint8_t a,uint8_t x) {
+	rb0(0,x,"USB EP ENABLED","ON","OFF");
+	rl(3,x,"USB DATA TOGGLE RESET");
+	rl(4,x,"USB DISABLE STALL");
+	rl(5,x,"USB STALL REQUEST");
+
+	sim_usb_ep[mem[0xe9]&7].eb=x;
+}
+
+#undef avr_IOWec
+void avr_IOWec(uint8_t a,uint8_t x) {
+	rb0(0,x,"USB EP DIRECTION","IN","OUT");
+	char *ept[4]={"CONTROL","ISOCHRONOUS","BULK","INTERRUPT"};
+	printf("  USB EP TYPE: %s\n",ept[x>>6]);
+	sim_usb_ep[mem[0xe9]&7].ec=x;
+}
+
+#undef avr_IOWed
+void avr_IOWed(uint8_t a,uint8_t x) {
+	rb0(1,x,"USB EP MEMORY","ALLOC","FREE");
+	rb0(2,x,"USB EP BANKS","2","1");
+	printf("  USB EP SIZE: %u\n",8<<((x>>4)&7));
+	sim_usb_ep[mem[0xe9]&7].ed=x;
+}
+
+
+#undef avr_IOWf0
+void avr_IOWf0(uint8_t a,uint8_t x) {
+	rb0(0,x,"USB EP TXINE","ON","OFF");
+	rb0(1,x,"USB EP STALLEDE","ON","OFF");
+	rb0(2,x,"USB EP RXOUTE","ON","OFF");
+	rb0(3,x,"USB EP RXSTPE","ON","OFF");
+	rb0(4,x,"USB EP NAKOUTE","ON","OFF");
+	rb0(6,x,"USB EP NAKINE","ON","OFF");
+	rb0(7,x,"USB EP FLERRE","ON","OFF");
+	sim_usb_ep[mem[0xe9]&7].f0=x;
 }
 
 #undef avr_IOR5f
