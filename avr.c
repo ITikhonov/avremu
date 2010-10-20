@@ -15,6 +15,7 @@ uint8_t mem[0xb00];
 uint16_t flash[0x4000];
 uint16_t pc;
 uint64_t clocks;
+int skipnext;
 
 typedef uint8_t (*io_read_func)(uint8_t a);
 typedef void (*io_write_func)(uint8_t a,uint8_t x);
@@ -127,7 +128,7 @@ void avr_IOW49(uint8_t a,uint8_t x) {
 
 	rb(4,x,o,"PLL Prescaler","1:1","1:2");
 	rb(1,x,o,"PLL","ON","OFF");
-	if(x&2) { plllock_at=clocks+2500000; } else { x=x&0xfe; }
+	if(x&2) { plllock_at=clocks+250; } else { x=x&0xfe; }
 	mem[a]=x;
 }
 
@@ -385,6 +386,13 @@ int avr_PUSH(uint16_t i) {
 	return 2;
 }
 
+int avr_SBRS(uint16_t i) {
+	if(reg(ARG_SBRS_A)&(1<<ARG_SBRS_B)) {
+		skipnext=1; return 2;
+	}
+	return 1;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
@@ -415,7 +423,6 @@ int avr_PUSH(uint16_t i) {
 #define avr_OR avr_UNIMPL
 #define avr_CP avr_UNIMPL
 #define avr_ADIW avr_UNIMPL
-#define avr_SBRS avr_UNIMPL
 #define avr_SBRC avr_UNIMPL
 #define avr_BRCS avr_UNIMPL
 #define avr_BREQ avr_UNIMPL
@@ -476,9 +483,14 @@ void run() {
 		} else if(f<0) {
 			f=-f;
 			pc++;
+			if(skipnext) clocks++;
 		}
+
 		LOG("%s\n",inst_names[f]);
-		if(inst_funcs[f]) {
+		if(skipnext) {
+			LOG("  skipped\n");
+			skipnext=0;
+		} else if(inst_funcs[f]) {
 			int clocksdone=inst_funcs[f](i);
 			clocks+=clocksdone;
 			delay_clock+=clocksdone;
@@ -503,6 +515,7 @@ void reset() {
 	setsp(0xaff);
 	pc=0;
 	clocks=0;
+	skipnext=0;
 }
 
 int main(int argc, char *argv[]) {
