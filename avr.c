@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 #include <sys/time.h>
 #include <stdarg.h>
 
@@ -13,14 +14,14 @@
 uint8_t mem[0xb00];
 uint16_t flash[0x4000];
 uint16_t pc;
-uint32_t clocks;
+uint64_t clocks;
 
 typedef void (*io_read_func)(uint8_t a);
 typedef void (*io_write_func)(uint8_t a,uint8_t x);
 
 void load() {
 	int f=open("blink_slow.bin",O_RDONLY);
-	read(f,&flash,sizeof(flash));
+	if(read(f,&flash,sizeof(flash))) ;
 }
 
 #ifdef VERBOSE
@@ -274,20 +275,37 @@ int avr_RET(uint16_t i) {
 
 #include "decode.inc"
 
-double floattime() {
+uint64_t time64() {
 	struct timeval t;
 	gettimeofday(&t,0);
-	return t.tv_sec+(t.tv_usec*1e-6);
+	return (uint64_t)t.tv_sec*1000000+t.tv_usec;
 }
 
 void run() {
-	double start=floattime();
+	uint64_t start_report=time64();
+	uint64_t clock_report=clocks;
+
+	uint64_t delay_clock=0;
+
+	struct timespec delay={0,1};
+
 	for(;;) {
-		LOG("%4x (%u):",pc*2,clocks);
-		if(clocks==8000000) {
-			double now=floattime();
-			printf("## %u clocks per %0.3lf seconds\n",clocks,now-start);
-			start=now; clocks=0;
+		int clock_divisor=1<<(mem[0x61]&0xf);
+		LOG("%4x (%lu):",pc*2,clocks);
+
+		if(clocks-clock_report>=8000000/clock_divisor) {
+			uint64_t now=time64();
+			printf("## %lu clocks per %lu usecond\n",(clocks-clock_report),(now-start_report));
+			int clocks_passed=clocks-clock_report;
+			int us_passed=now-start_report;
+
+
+			int fc=(1000/8)*clock_divisor-(us_passed*1000)/clocks_passed;
+			printf("need to slowdown for %i ns per clock\n",fc);
+			delay.tv_nsec+=fc*1000;
+			if(delay.tv_nsec<0) delay.tv_nsec=0;
+
+			start_report=now; clock_report=clocks;
 		}
 
 		uint16_t i=flash[pc];
@@ -296,7 +314,7 @@ void run() {
 			printf("unknown instruction %04x at %04x\n",i,pc*2);
 			char buf[1024];
 			sprintf(buf,"grep '^%4x' disasm.txt",pc*2);
-			system(buf);
+			if(system(buf)) ;
 			return;
 
 		} else if(f<0) {
@@ -305,12 +323,18 @@ void run() {
 		}
 		LOG("%s\n",inst_names[f]);
 		if(inst_funcs[f]) {
-			clocks+=inst_funcs[f](i);
+			int clocksdone=inst_funcs[f](i);
+			clocks+=clocksdone;
+			delay_clock+=clocksdone;
+			if(delay_clock>1000 && delay.tv_nsec) {
+				nanosleep(&delay,0);
+				delay_clock=0;
+			}
 		} else {
 			printf("instruction %s (%04x at %04x) not implemented\n",inst_names[f],i,pc*2);
 			char buf[1024];
 			sprintf(buf,"grep '^%4x' disasm.txt",pc*2);
-			system(buf);
+			if(system(buf)) ;
 			return;
 		}
 		pc++;
@@ -324,6 +348,8 @@ void reset() {
 }
 
 int main() {
+	setlinebuf(stdout);
+
 	load();
 	reset();
 	run();

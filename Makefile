@@ -1,4 +1,4 @@
-CFLAGS=-Wall
+CFLAGS=-Wall -Werror -O6
 
 run: avr
 	./avr
