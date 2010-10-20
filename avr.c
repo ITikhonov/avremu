@@ -65,6 +65,8 @@ void push16(uint16_t);
 
 struct {
 	uint8_t eb,ec,ed,f0;
+	uint8_t *fifo;
+	int fifoi;
 } sim_usb_ep[6];
 
 void sim_usb_initspeed() {
@@ -76,7 +78,15 @@ void sim_usb_initspeed() {
 	pc=0x14;
 }
 
+
+uint8_t pkt_setaddr[]={0x00,0x05,0x12,0x34,0x00,0x00};
+
 void sim_usb_setaddr() {
+	printf("!! USB SETADDR\n");
+	mem[0xe8]=1<<3;
+	sim_usb_ep[0].fifo=pkt_setaddr;
+	sim_usb_ep[0].fifoi=0;
+
 	push16(pc);
 	setI(0);
 	pc=0x16;
@@ -123,6 +133,14 @@ void schedules() {
 #undef avr_IOWe1
 uint8_t avr_IORe1(uint8_t a) { return mem[0xe1]; }
 void avr_IOWe1(uint8_t a, uint8_t x) { mem[0xe1]=x; }
+
+
+#undef avr_IORf1
+uint8_t avr_IORf1(uint8_t a) {
+	uint8_t x=sim_usb_ep[mem[0xe9]&7].fifo[sim_usb_ep[mem[0xe9]&7].fifoi++];
+	printf("  USB READ: %02x\n",x);
+	return x;
+}
 
 #undef avr_IOW2a
 void avr_IOW2a(uint8_t a,uint8_t x) {
@@ -191,8 +209,15 @@ void avr_IOWf0(uint8_t a,uint8_t x) {
 	rb0(4,x,"USB EP NAKOUTE","ON","OFF");
 	rb0(6,x,"USB EP NAKINE","ON","OFF");
 	rb0(7,x,"USB EP FLERRE","ON","OFF");
+
+	if(x&(1<<3)) { schedule(250,sim_usb_setaddr); }
+
+
 	sim_usb_ep[mem[0xe9]&7].f0=x;
 }
+
+#undef avr_IORe8
+uint8_t avr_IORe8(uint8_t a) { return mem[a]; }
 
 #undef avr_IOR5f
 uint8_t avr_IOR5f(uint8_t a) { return mem[a]; }
