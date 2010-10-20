@@ -92,6 +92,13 @@ void setreg(unsigned int r, uint8_t v) {
 	LOG("  r%u=%02x\n",r,v);
 }
 
+void setreg16(unsigned int r, uint16_t v) {
+	assert(r<0x1f);
+	mem[r]=v;
+	mem[r+1]=v>>8;
+	LOG("  r%u+1:%u=%04x\n",r,r,v);
+}
+
 void setio(unsigned int addr, uint8_t v) {
 	assert(addr>0x1f&&addr<0x100);
 	if(io_write_funcs[addr-0x20]) {
@@ -115,6 +122,7 @@ void setmem(unsigned int addr,uint8_t v) {
 }
 
 void setZ(int x) { mem[0x5f]&=~0x02; if(x) mem[0x5f]|=0x02; }
+void setC(int x) { mem[0x5f]&=~0x01; if(x) mem[0x5f]|=0x01; }
 void setNV(int n,int v) {
 	mem[0x5f]&=~0x04; if(n) mem[0x5f]|=0x04;
 	mem[0x5f]&=~0x08; if(v) mem[0x5f]|=0x08;
@@ -139,6 +147,12 @@ uint8_t reg(unsigned int x) {
 	return mem[x];
 }
 
+uint16_t reg16(unsigned int x) {
+	assert(x<0x1f);
+	return (mem[x+1]<<8)|mem[x];
+}
+
+int getC() { return mem[0x5f]&1; }
 int getZ() { return mem[0x5f]&2; }
 
 /**************************************************************/
@@ -246,26 +260,63 @@ int avr_OUT(uint16_t i) {
 	return 1;
 }
 
+int avr_CPI(uint16_t i) {
+	uint8_t d=reg(0x10+ARG_CPI_B);
+	uint8_t k=ARG_CPI_A;
+	int u=d-k;
+	int s=(int8_t)d-(int8_t)k;
+
+	setZ((u&0xff)==0);
+	setNV(u&0x80,s<-128||s>128);
+	setC(u<0||u>255);
+
+	return 1;
+}
+
+int avr_CPC(uint16_t i) {
+	int c=getC();
+	uint8_t d=reg(ARG_CPC_B);
+	uint8_t r=reg(ARG_CPC_A);
+	int u=d-r-c;
+	int s=(int8_t)d-(int8_t)r-c;
+
+	setZ((u&0xff)==0&&getZ());
+	setNV(u&0x80,s<-128||s>128);
+	setC(u<0||u>255);
+
+	return 1;
+}
+
+int avr_LPMZP(uint16_t i) {
+	uint16_t a=reg16(0x1e);
+	setreg(ARG_LPMZP_A,flash[a/2]>>((a&1)?8:0));
+	setreg16(0x1e,a+1);
+	return 3;
+}
+
+int avr_STXP(uint16_t i) {
+	uint16_t a=reg16(0x1a);
+	setmem(a,reg(ARG_STXP_A));
+	setreg16(0x1a,a+1);
+	return 2;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
-#define avr_LPMZP avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
 #define avr_LDZP avr_UNIMPL
 #define avr_LDX avr_UNIMPL
 #define avr_LDDZ avr_UNIMPL
-#define avr_STXP avr_UNIMPL
 #define avr_STZP avr_UNIMPL
 #define avr_STX avr_UNIMPL
 #define avr_STY avr_UNIMPL
 #define avr_STZ avr_UNIMPL
 #define avr_STDY avr_UNIMPL
 #define avr_STDZ avr_UNIMPL
-#define avr_CPI avr_UNIMPL
 #define avr_ANDI avr_UNIMPL
 #define avr_ORI avr_UNIMPL
 #define avr_SBCI avr_UNIMPL
-#define avr_CPC avr_UNIMPL
 #define avr_ADC avr_UNIMPL
 #define avr_PUSH avr_UNIMPL
 #define avr_POP avr_UNIMPL
