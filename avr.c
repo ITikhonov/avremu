@@ -103,6 +103,11 @@ void schedules() {
 
 #include "ioundef.inc"
 
+#undef avr_IORe1
+#undef avr_IOWe1
+uint8_t avr_IORe1(uint8_t a) { return mem[0xe1]; }
+void avr_IOWe1(uint8_t a, uint8_t x) { mem[0xe1]=x; }
+
 #undef avr_IOW2a
 void avr_IOW2a(uint8_t a,uint8_t x) {
 	uint8_t o=mem[a];
@@ -127,6 +132,8 @@ void avr_IOW2b(uint8_t a,uint8_t x) {
 	mem[a]=x;
 }
 
+#undef avr_IOR5f
+uint8_t avr_IOR5f(uint8_t a) { return mem[a]; }
 #undef avr_IOW5f
 void avr_IOW5f(uint8_t a,uint8_t x) { mem[a]=x; }
 
@@ -501,6 +508,11 @@ int avr_AND(uint16_t i) {
 	return 1;
 }
 
+int avr_MOV(uint16_t i) {
+	setreg(ARG_MOV_B,reg(ARG_MOV_A));
+	return 1;
+}
+
 #define avr_UNIMPL (0)
 #define avr_MOVW avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
@@ -525,7 +537,6 @@ int avr_AND(uint16_t i) {
 #define avr_SUBI avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
 #define avr_SBIW avr_UNIMPL
-#define avr_MOV avr_UNIMPL
 #define avr_OR avr_UNIMPL
 #define avr_CP avr_UNIMPL
 #define avr_ADIW avr_UNIMPL
