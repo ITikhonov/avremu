@@ -37,6 +37,13 @@ void LOG(char *fmt,...) {
 #define LOG(...) ;
 #endif
 
+void rb(int bit,uint8_t n,uint8_t o,char *name,char *on, char *off) {
+	int m=1<<bit;
+	if((n&m)!=(o&m)) {
+		printf("  %s: %s\n",name,(n&m)?on:off);
+	}
+}
+
 
 /**************************************************************/
 
@@ -79,6 +86,22 @@ void avr_IOW5d(uint8_t a,uint8_t x) { mem[a]=x; }
 void avr_IOW61(uint8_t a,uint8_t x) {
 	if(x==0x80) { printf("  CLKPCE\n"); }
 	else { printf("  CLKPS:%x\n",1<<(x&0xf)); }
+	mem[a]=x;
+}
+
+#undef avr_IOWd7
+void avr_IOWd7(uint8_t a,uint8_t x) {
+	if((x&1)!=(mem[a]&1)) { printf("  USB Pad Regulator: %s\n",x&1?"ENABLED":"DISABLED"); }
+	mem[a]=x;
+}
+
+#undef avr_IOWd8
+void avr_IOWd8(uint8_t a,uint8_t x) {
+	uint8_t o=mem[a];
+	rb(7,x,o,"USB","ON","OFF");
+	rb(5,x,o,"USB CLOCK","FREEZED","ENABLED");
+	rb(4,x,o,"USB VBUS PAD","ON","OFF");
+	rb(0,x,o,"USB VBUS INT","ON","OFF");
 	mem[a]=x;
 }
 
@@ -301,6 +324,13 @@ int avr_STXP(uint16_t i) {
 	return 2;
 }
 
+int avr_PUSH(uint16_t i) {
+	uint16_t s=sp();
+	mem[s]=reg(ARG_PUSH_A);
+	setsp(s-1);
+	return 2;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
@@ -318,7 +348,6 @@ int avr_STXP(uint16_t i) {
 #define avr_ORI avr_UNIMPL
 #define avr_SBCI avr_UNIMPL
 #define avr_ADC avr_UNIMPL
-#define avr_PUSH avr_UNIMPL
 #define avr_POP avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
