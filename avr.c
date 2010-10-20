@@ -613,6 +613,16 @@ int avr_RETI(uint16_t i) {
         return 4;
 }
 
+
+int avr_OR(uint16_t i) {
+	uint8_t r;
+	int d=ARG_AND_B;
+	setreg(d,r=reg(d)|reg(ARG_AND_A));
+	setZ(r==0);
+	setNV(r&0x80,0);
+	return 1;
+}
+
 #define avr_UNIMPL (0)
 #define avr_MOVW avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
@@ -636,7 +646,6 @@ int avr_RETI(uint16_t i) {
 #define avr_SUBI avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
 #define avr_SBIW avr_UNIMPL
-#define avr_OR avr_UNIMPL
 #define avr_CP avr_UNIMPL
 #define avr_ADIW avr_UNIMPL
 #define avr_SBRC avr_UNIMPL
