@@ -132,6 +132,28 @@ void avr_IOW49(uint8_t a,uint8_t x) {
 	mem[a]=x;
 }
 
+#undef avr_IOWe0
+void avr_IOWe0(uint8_t a,uint8_t x) {
+	uint8_t o=mem[a];
+	rb(3,x,o,"USB Reset CPU","ON","OFF");
+	rb(2,x,o,"USB Low Speed","ON","OFF");
+	rb(1,x,o,"USB Remote Wake-up","SEND","WTF");
+	rb(0,x,o,"USB Detach","ON","OFF");
+	mem[a]=x;
+}
+
+#undef avr_IOWe2
+void avr_IOWe2(uint8_t a,uint8_t x) {
+        uint8_t o=mem[a];
+	rb(6,x,o,"USB UPRSMI","ON","OFF");
+	rb(5,x,o,"USB EORSMI","ON","OFF");
+	rb(4,x,o,"USB WAKEUPI","ON","OFF");
+	rb(3,x,o,"USB EORSTI","ON","OFF");
+	rb(2,x,o,"USB SOFI","ON","OFF");
+	rb(0,x,o,"USB SUSPI","ON","OFF");
+        mem[a]=x;
+}
+
 #include "io.inc"
 
 /**************************************************************/
