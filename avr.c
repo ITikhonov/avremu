@@ -24,6 +24,8 @@ void load(char *n) {
 	if(read(f,&flash,sizeof(flash))) ;
 }
 
+#define VERBOSE
+
 #ifdef VERBOSE
 void LOG(char *fmt,...) {
 	va_list ap;
@@ -63,6 +65,15 @@ void avr_IOW2b(uint8_t a,uint8_t x) {
 	}
 	mem[a]=x;
 }
+
+#undef avr_IOW5f
+void avr_IOW5f(uint8_t a,uint8_t x) { mem[a]=x; }
+
+#undef avr_IOW5e
+void avr_IOW5e(uint8_t a,uint8_t x) { mem[a]=x; }
+
+#undef avr_IOW5d
+void avr_IOW5d(uint8_t a,uint8_t x) { mem[a]=x; }
 
 #undef avr_IOW61
 void avr_IOW61(uint8_t a,uint8_t x) {
@@ -221,10 +232,23 @@ int avr_RET(uint16_t i) {
         return 4;
 }
 
+int avr_EOR(uint16_t i) {
+	int rd=ARG_EOR_B;
+	uint8_t r;
+	setreg(rd,r=(reg(rd)^reg(ARG_EOR_A)));
+	setZ(r==0);
+	setNV(r&0x80,0);
+	return 1;
+}
+
+int avr_OUT(uint16_t i) {
+	setmem(0x20+ARG_OUT_A,reg(ARG_OUT_B));
+	return 1;
+}
+
 #define avr_UNIMPL (0)
 #define avr_LDS avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
-#define avr_OUT avr_UNIMPL
 #define avr_LPMZP avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
 #define avr_LDZP avr_UNIMPL
@@ -248,7 +272,6 @@ int avr_RET(uint16_t i) {
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
 #define avr_IN avr_UNIMPL
-#define avr_EOR avr_UNIMPL
 #define avr_AND avr_UNIMPL
 #define avr_ADD avr_UNIMPL
 #define avr_SUB avr_UNIMPL
