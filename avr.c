@@ -48,14 +48,57 @@ void rb(int bit,uint8_t n,uint8_t o,char *name,char *on, char *off) {
 
 /**************************************************************/
 
+void setI(int);
+void push16(uint16_t);
+
+void sim_usb_initspeed() {
+	printf("!! USB INIT SPEED\n");
+
+	mem[0xe1]=1<<3;
+	push16(pc);
+	setI(0);
+	pc=0x14;
+}
+
+void sim_usb_setaddr() {
+	push16(pc);
+	setI(0);
+	pc=0x16;
+}
+
+/**************************************************************/
+
 uint64_t plllock_at=0;
 
+typedef void (*sched_func)(void);
+
+struct {
+	uint64_t clock;
+	sched_func f;
+} sched[10]={{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}};
+
+void schedule(uint64_t after, sched_func f) {
+	int i;
+	for(i=0;i<10;i++) {
+		if(sched[i].clock) continue;
+		sched[i].clock=clocks+after;
+		sched[i].f=f;
+		return;
+	}
+	printf("No free schedulers\n");
+	abort();
+}
+
 void schedules() {
-	if(plllock_at && plllock_at<clocks) {
-		plllock_at=0;
-		mem[0x49]|=1;
+	int i;
+	for(i=0;i<10;i++) {
+		if(sched[i].clock && sched[i].clock<clocks) {
+			sched[i].clock=0;
+			sched[i].f();
+		}
 	}
 }
+
 /**************************************************************/
 
 #include "ioundef.inc"
@@ -113,12 +156,22 @@ void avr_IOWd8(uint8_t a,uint8_t x) {
 	rb(5,x,o,"USB CLOCK","FREEZED","ENABLED");
 	rb(4,x,o,"USB VBUS PAD","ON","OFF");
 	rb(0,x,o,"USB VBUS INT","ON","OFF");
+
+	if(!(x&(1<<5))) {
+		schedule(250,sim_usb_initspeed);
+	}
 	mem[a]=x;
 }
 
 #undef avr_IOR49
 uint8_t avr_IOR49(uint8_t a) {
 	return mem[a];
+}
+
+
+void plllock() {
+	printf("!! PLLLOCK\n");
+	mem[0x49]|=1;
 }
 
 #undef avr_IOW49
@@ -128,7 +181,7 @@ void avr_IOW49(uint8_t a,uint8_t x) {
 
 	rb(4,x,o,"PLL Prescaler","1:1","1:2");
 	rb(1,x,o,"PLL","ON","OFF");
-	if(x&2) { plllock_at=clocks+250; } else { x=x&0xfe; }
+	if(x&2) { schedule(250,plllock); } else { x=x&0xfe; }
 	mem[a]=x;
 }
 
@@ -193,6 +246,7 @@ void setmem(unsigned int addr,uint8_t v) {
 	}
 }
 
+void setI(int x) { mem[0x5f]&=~0x80; if(x) mem[0x5f]|=0x80; }
 void setZ(int x) { mem[0x5f]&=~0x02; if(x) mem[0x5f]|=0x02; }
 void setC(int x) { mem[0x5f]&=~0x01; if(x) mem[0x5f]|=0x01; }
 void setNV(int n,int v) {
@@ -208,10 +262,25 @@ void setsp(uint16_t x) {
 	mem[0x5d]=x&0xff;
 }
 
+uint16_t sp();
+
+void push16(uint16_t x) {
+        uint16_t p=sp();
+        mem[p]=x&0xff;
+        mem[p-1]=x>>8;
+        setsp(p-2);
+}
+
 /**************************************************************/
 
 uint16_t sp() {
 	return (mem[0x5e]<<8)|mem[0x5d];
+}
+
+uint16_t pop16() {
+        uint16_t p=sp();
+        setsp(p+2);
+	return (mem[p+1]<<8)|mem[p+2];
 }
 
 uint8_t reg(unsigned int x) {
@@ -312,10 +381,7 @@ int avr_DEC(uint16_t i) {
 }
 
 int avr_RCALL(uint16_t i) {
-        uint16_t p=sp();
-        mem[p]=pc&0xff;
-        mem[p-1]=pc>>8;
-        setsp(p-2);
+	push16(pc);
         pc+=ARG_RCALL_A;
         return 3;
 }
@@ -338,9 +404,7 @@ int avr_RJMP(uint16_t i) {
 }
 
 int avr_RET(uint16_t i) {
-        uint16_t p=sp();
-        pc=(mem[p+1]<<8)|mem[p+2];
-        setsp(p+2);
+        pc=pop16();
         return 4;
 }
 
@@ -553,6 +617,7 @@ void run() {
 
 void reset() {
 	setsp(0xaff);
+	mem[0xd8]=0b00100000; // USBCON
 	pc=0;
 	clocks=0;
 	skipnext=0;
