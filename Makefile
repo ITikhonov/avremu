@@ -1,7 +1,7 @@
 CFLAGS=-Wall -Werror -O6
 
 run: avr
-	./avr
+	./avr blink_slow.bin
 
 avr: avr.o
 

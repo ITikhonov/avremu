@@ -19,8 +19,8 @@ uint64_t clocks;
 typedef void (*io_read_func)(uint8_t a);
 typedef void (*io_write_func)(uint8_t a,uint8_t x);
 
-void load() {
-	int f=open("blink_slow.bin",O_RDONLY);
+void load(char *n) {
+	int f=open(n,O_RDONLY);
 	if(read(f,&flash,sizeof(flash))) ;
 }
 
@@ -347,10 +347,10 @@ void reset() {
 	clocks=0;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 	setlinebuf(stdout);
 
-	load();
+	load(argv[1]);
 	reset();
 	run();
 	return 0;
