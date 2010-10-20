@@ -322,10 +322,13 @@ int avr_RCALL(uint16_t i) {
 
 int avr_BRNE(uint16_t i) {
 	dumpSREG();
-        if (!getZ()) {
-                pc+=ARG_BRNE_A;
-                return 2;
-	}
+        if (!getZ()) { pc+=ARG_BRNE_A; return 2; }
+        return 1;
+}
+
+int avr_BREQ(uint16_t i) {
+	dumpSREG();
+        if (getZ()) { pc+=ARG_BREQ_A; return 2; }
         return 1;
 }
 
@@ -415,8 +418,26 @@ int avr_SBRS(uint16_t i) {
 	return 1;
 }
 
+int avr_SEI(uint16_t i) {
+	mem[0x5f]|=0x80;
+	return 1;
+}
+
+int avr_LDS(uint16_t i) {
+	setreg(ARG_LDS_A,getmem(flash[pc]));
+	return 2;
+}
+
+int avr_AND(uint16_t i) {
+	uint8_t r;
+	int d=ARG_AND_B;
+	setreg(d,r=reg(d)&reg(ARG_AND_A));
+	setZ(r==0);
+	setNV(r&0x80,0);
+	return 1;
+}
+
 #define avr_UNIMPL (0)
-#define avr_LDS avr_UNIMPL
 #define avr_MOVW avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
 #define avr_LDZP avr_UNIMPL
@@ -435,7 +456,6 @@ int avr_SBRS(uint16_t i) {
 #define avr_POP avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
-#define avr_AND avr_UNIMPL
 #define avr_ADD avr_UNIMPL
 #define avr_SUB avr_UNIMPL
 #define avr_SUBI avr_UNIMPL
@@ -447,13 +467,11 @@ int avr_SBRS(uint16_t i) {
 #define avr_ADIW avr_UNIMPL
 #define avr_SBRC avr_UNIMPL
 #define avr_BRCS avr_UNIMPL
-#define avr_BREQ avr_UNIMPL
 #define avr_BRGE avr_UNIMPL
 #define avr_BRCC avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
 #define avr_RETI avr_UNIMPL
 #define avr_SEC avr_UNIMPL
-#define avr_SEI avr_UNIMPL
 #define avr_CLI avr_UNIMPL
 
 /**************************************************************/
