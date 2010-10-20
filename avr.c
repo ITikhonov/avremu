@@ -16,7 +16,7 @@ uint16_t flash[0x4000];
 uint16_t pc;
 uint64_t clocks;
 
-typedef void (*io_read_func)(uint8_t a);
+typedef uint8_t (*io_read_func)(uint8_t a);
 typedef void (*io_write_func)(uint8_t a,uint8_t x);
 
 void load(char *n) {
@@ -45,6 +45,16 @@ void rb(int bit,uint8_t n,uint8_t o,char *name,char *on, char *off) {
 }
 
 
+/**************************************************************/
+
+uint64_t plllock_at=0;
+
+void schedules() {
+	if(plllock_at && plllock_at<clocks) {
+		plllock_at=0;
+		mem[0x49]|=1;
+	}
+}
 /**************************************************************/
 
 #include "ioundef.inc"
@@ -102,6 +112,22 @@ void avr_IOWd8(uint8_t a,uint8_t x) {
 	rb(5,x,o,"USB CLOCK","FREEZED","ENABLED");
 	rb(4,x,o,"USB VBUS PAD","ON","OFF");
 	rb(0,x,o,"USB VBUS INT","ON","OFF");
+	mem[a]=x;
+}
+
+#undef avr_IOR49
+uint8_t avr_IOR49(uint8_t a) {
+	return mem[a];
+}
+
+#undef avr_IOW49
+void avr_IOW49(uint8_t a,uint8_t x) {
+	uint8_t o=mem[a];
+	x=(x&0xfe)|(o&1);
+
+	rb(4,x,o,"PLL Prescaler","1:1","1:2");
+	rb(1,x,o,"PLL","ON","OFF");
+	if(x&2) { plllock_at=clocks+2500000; } else { x=x&0xfe; }
 	mem[a]=x;
 }
 
@@ -175,8 +201,31 @@ uint16_t reg16(unsigned int x) {
 	return (mem[x+1]<<8)|mem[x];
 }
 
+
+uint8_t io(unsigned int addr) {
+	assert(addr>0x1f&&addr<0x100);
+	if(io_read_funcs[addr-0x20]) {
+		return io_read_funcs[addr-0x20](addr);
+	} else {
+		printf("io read %04x is not implemented\n",addr);
+		abort();
+	}
+}
+
+uint8_t getmem(unsigned int addr) {
+	if(addr<0x20) { return reg(addr); }
+	else if(addr<0x100) { return io(addr); }
+	else if(addr<0x4000) {
+		return mem[addr];
+	} else {
+		printf("address [%04x] above available memory\n",addr);
+		abort();
+	}
+}
+
 int getC() { return mem[0x5f]&1; }
 int getZ() { return mem[0x5f]&2; }
+
 
 /**************************************************************/
 
@@ -283,6 +332,11 @@ int avr_OUT(uint16_t i) {
 	return 1;
 }
 
+int avr_IN(uint16_t i) {
+	setreg(ARG_OUT_B,io(0x20+ARG_OUT_A));
+	return 1;
+}
+
 int avr_CPI(uint16_t i) {
 	uint8_t d=reg(0x10+ARG_CPI_B);
 	uint8_t k=ARG_CPI_A;
@@ -351,7 +405,6 @@ int avr_PUSH(uint16_t i) {
 #define avr_POP avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
-#define avr_IN avr_UNIMPL
 #define avr_AND avr_UNIMPL
 #define avr_ADD avr_UNIMPL
 #define avr_SUB avr_UNIMPL
@@ -441,6 +494,8 @@ void run() {
 			return;
 		}
 		pc++;
+
+		schedules();
 	}
 }
 
