@@ -544,6 +544,13 @@ int avr_PUSH(uint16_t i) {
 	return 2;
 }
 
+int avr_POP(uint16_t i) {
+	uint16_t s=sp();
+	setreg(ARG_POP_A,mem[s+1]);
+	setsp(s+1);
+	return 2;
+}
+
 int avr_SBRS(uint16_t i) {
 	if(reg(ARG_SBRS_A)&(1<<ARG_SBRS_B)) {
 		skipnext=1; return 2;
@@ -575,6 +582,12 @@ int avr_MOV(uint16_t i) {
 	return 1;
 }
 
+int avr_RETI(uint16_t i) {
+	setI(1);
+        pc=pop16();
+        return 4;
+}
+
 #define avr_UNIMPL (0)
 #define avr_MOVW avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
@@ -591,7 +604,6 @@ int avr_MOV(uint16_t i) {
 #define avr_ORI avr_UNIMPL
 #define avr_SBCI avr_UNIMPL
 #define avr_ADC avr_UNIMPL
-#define avr_POP avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
 #define avr_ADD avr_UNIMPL
@@ -607,7 +619,6 @@ int avr_MOV(uint16_t i) {
 #define avr_BRGE avr_UNIMPL
 #define avr_BRCC avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
-#define avr_RETI avr_UNIMPL
 #define avr_SEC avr_UNIMPL
 #define avr_CLI avr_UNIMPL
 
