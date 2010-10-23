@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <sys/time.h>
 #include <stdarg.h>
@@ -10,6 +11,11 @@
 
 #undef NDEBUG
 #include <assert.h>
+
+int gfs_init();
+int gfs_poll(uint64_t ns, uint8_t *r);
+
+uint8_t setup_pkt[8];
 
 uint8_t mem[0xb00];
 uint16_t flash[0x4000];
@@ -65,7 +71,7 @@ void push16(uint16_t);
 
 struct {
 	uint8_t eb,ec,ed,f0;
-	uint8_t *fifo;
+	uint8_t fifo[128];
 	int fifoi;
 } sim_usb_ep[6];
 
@@ -84,7 +90,7 @@ uint8_t pkt_setaddr[]={0x00,0x05,0x12,0x34,0x00,0x00};
 void sim_usb_setaddr() {
 	printf("!! USB SETADDR\n");
 	mem[0xe8]=1<<3;
-	sim_usb_ep[0].fifo=pkt_setaddr;
+	memcpy(sim_usb_ep[0].fifo,pkt_setaddr,sizeof(pkt_setaddr));
 	sim_usb_ep[0].fifoi=0;
 
 	push16(pc);
@@ -137,8 +143,9 @@ void avr_IOWe1(uint8_t a, uint8_t x) { mem[0xe1]=x; }
 
 #undef avr_IORf1
 uint8_t avr_IORf1(uint8_t a) {
+	printf("  USB READ EP%u\n",mem[0xe9]&7);
 	uint8_t x=sim_usb_ep[mem[0xe9]&7].fifo[sim_usb_ep[mem[0xe9]&7].fifoi++];
-	printf("  USB READ: %02x\n",x);
+	printf("  USB READ EP%u: %02x\n",mem[0xe9]&7,x);
 	return x;
 }
 
@@ -210,14 +217,29 @@ void avr_IOWf0(uint8_t a,uint8_t x) {
 	rb0(6,x,"USB EP NAKINE","ON","OFF");
 	rb0(7,x,"USB EP FLERRE","ON","OFF");
 
-	if(x&(1<<3)) { schedule(250,sim_usb_setaddr); }
-
-
+	// if(x&(1<<3)) { schedule(250,sim_usb_setaddr); }
 	sim_usb_ep[mem[0xe9]&7].f0=x;
 }
 
 #undef avr_IORe8
 uint8_t avr_IORe8(uint8_t a) { return mem[a]; }
+#undef avr_IOWe8
+void avr_IOWe8(uint8_t a, uint8_t x) {
+	rb0(0,x,"USB EP TXINI","ON","OFF");
+	rb0(1,x,"USB EP STALLEDI","ON","OFF");
+	rb0(2,x,"USB EP RXOUTI","ON","OFF");
+	rb0(3,x,"USB EP RXSTPI","ON","OFF");
+	rb0(4,x,"USB EP NAKOUTI","ON","OFF");
+	rb0(5,x,"USB EP RWAL","ON","OFF");
+	rb0(6,x,"USB EP NAKINI","ON","OFF");
+	rb0(7,x,"USB EP FIFOCON","ON","OFF");
+
+	if((x&1)==0) {
+		//ask for descriptor
+	}
+
+	mem[a]=a;
+}
 
 #undef avr_IOR5f
 uint8_t avr_IOR5f(uint8_t a) { return mem[a]; }
@@ -252,6 +274,7 @@ void avr_IOWd8(uint8_t a,uint8_t x) {
 	rb(0,x,o,"USB VBUS INT","ON","OFF");
 
 	if(!(x&(1<<5))) {
+		gfs_init();
 		schedule(250,sim_usb_initspeed);
 	}
 	mem[a]=x;
@@ -396,6 +419,12 @@ uint8_t io(unsigned int addr) {
 		printf("io read %04x is not implemented\n",addr);
 		abort();
 	}
+}
+
+uint16_t getflash(unsigned int x) {
+	if(x<0x4000) return flash[x];
+	printf("flash [%04x] above available memory\n",x);
+	abort();
 }
 
 uint8_t getmem(unsigned int addr) {
@@ -589,7 +618,7 @@ int avr_SEI(uint16_t i) {
 }
 
 int avr_LDS(uint16_t i) {
-	setreg(ARG_LDS_A,getmem(flash[pc]));
+	setreg(ARG_LDS_A,getmem(getflash(pc)));
 	return 2;
 }
 
@@ -716,10 +745,25 @@ void run() {
 			int clocksdone=inst_funcs[f](i);
 			clocks+=clocksdone;
 			delay_clock+=clocksdone;
+			uint64_t d=0;
+			
 			if(delay_clock>1000 && delay.tv_nsec) {
-				nanosleep(&delay,0);
-				delay_clock=0;
+				d=delay.tv_nsec;
+			} else { d=1; }
+
+			if(sim_usb_ep[0].f0&(1<<3)) {
+				if(gfs_poll(d,sim_usb_ep[0].fifo)) {
+					printf("## GFS got setup\n");
+					mem[0xe8]|=1<<3;
+					sim_usb_ep[0].fifoi=0;
+
+					push16(pc+1);
+					setI(0);
+					pc=0x16;
+					continue;
+				}
 			}
+			delay_clock=0;
 		} else {
 			printf("instruction %s (%04x at %04x) not implemented\n",inst_names[f],i,pc*2);
 			char buf[1024];

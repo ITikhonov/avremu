@@ -3,7 +3,7 @@ CFLAGS=-Wall -Werror -O6
 run: avr
 	./avr example.bin
 
-avr: avr.o
+avr: avr.o gfs.o
 
 avr.o: avr.c decode.inc io.inc
 
