@@ -20,7 +20,11 @@ int gfs_poll(uint64_t ns, uint8_t *r);
 static uint8_t UDINT; // 0xe1
 static uint8_t UENUM; // 0xe9
 
-static enum {WAIT_INIT,REQUEST_DEV,WAIT_DEV,REQUEST_CONF,SET_ADDRESS} usb_state=WAIT_INIT;
+uint8_t devdesc[18];
+uint8_t confdesc[65535];
+int confdesci=0;
+
+static enum {WAIT_INIT,REQUEST_DEV,WAIT_DEV,REQUEST_CONF,WAIT_CONF,READ_CONF,SET_ADDRESS} usb_state=WAIT_INIT;
 
 static struct {
 	uint8_t UEINTX; // e8
@@ -29,9 +33,8 @@ static struct {
 	uint8_t UECFG1X; // ed
 	uint8_t UEIENX; // f0
 
-	uint8_t fifo[128];
+	uint8_t fifo[64];
 	int fifoi;
-	int write;
 } ep[6];
 
 static void sim_usb_initspeed() {
@@ -45,10 +48,27 @@ static uint8_t pkt_request_dev[8]={0x00,0x06, 0x00,0x01, 0x00,0x00, 0x12,0x00};
 
 static void sim_request_dev() {
 	printf("!! USB REQUEST DEV\n");
-	ep[0].UEINTX=1<<3;
+	ep[0].UEINTX|=1<<3;
 	memcpy(ep[0].fifo,pkt_request_dev,sizeof(pkt_request_dev));
 	ep[0].fifoi=0;
 	intr(0x16);
+}
+
+
+static uint8_t pkt_request_conf[8]={0x00,0x06, 0x00,0x02, 0x00,0x00, 0xff,0xff};
+
+static void sim_request_conf() {
+	printf("!! USB REQUEST CONF\n");
+	ep[0].UEINTX|=1<<3;
+	memcpy(ep[0].fifo,pkt_request_conf,sizeof(pkt_request_conf));
+	ep[0].fifoi=0;
+	intr(0x16);
+}
+
+
+static void sim_read_conf() {
+	printf("!! USB READ CONF\n");
+	ep[0].UEINTX|=1;
 }
 
 #if 0
@@ -57,7 +77,7 @@ static uint8_t pkt_setaddr[8]={0x00,0x05, 0x12,0x34, 0x00,0x00, 0x00,0x00};
 
 static void sim_usb_setaddr() {
 	printf("!! USB SETADDR\n");
-	ep[0].UEINTX=1<<3;
+	ep[0].UEINTX|=1<<3;
 	memcpy(ep[0].fifo,pkt_setaddr,sizeof(pkt_setaddr));
 	ep[0].fifoi=0;
 
@@ -92,8 +112,8 @@ static void avr_IOWeb(uint8_t a,uint8_t x) {
 	rl(4,x,"USB DISABLE STALL");
 	rl(5,x,"USB STALL REQUEST");
 
+	if(UENUM==0 && x&1 && (!(ep[UENUM].UECONX&1))) { usb_state=REQUEST_DEV; }
 	ep[UENUM].UECONX=x;
-	if(UENUM==0 && x&1) { usb_state=REQUEST_DEV; }
 }
 
 static void avr_IOWec(uint8_t a,uint8_t x) {
@@ -140,11 +160,33 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 
 	if(!(x&(1<<3))) { ep[0].fifoi=0; }
 	else if(!(x&(1<<0))) {
-		printf("on TXINI OFF send packet back!\n");
-		abort();
-	}
 
-	ep[UENUM].UEINTX=x;
+		int i;
+		printf("TX %u:",ep[0].fifoi);
+		for(i=0;i<ep[0].fifoi;i++) { printf(" %02x",ep[0].fifo[i]); }
+		printf("\n");
+
+		switch(usb_state) {
+		case WAIT_DEV:
+			memcpy(devdesc,ep[0].fifo,18);
+			usb_state=REQUEST_CONF;
+			break;
+		case WAIT_CONF:
+			memcpy(confdesc+confdesci,ep[0].fifo,ep[0].fifoi);
+			confdesci+=ep[0].fifoi;
+			if(confdesci>(confdesc[2]|(confdesc[3]<<8))) {
+				printf("read more then confdesc size %u\n",confdesci);
+				abort();
+			} else if(confdesci==(confdesc[2]|(confdesc[3]<<8))) {
+				printf("conf read size %u\n",confdesci);
+				abort();
+			}
+			break;
+		default:;
+		}
+
+		ep[0].fifoi=0;
+	}
 }
 
 static uint8_t UHWCON;
@@ -198,7 +240,7 @@ static void avr_IOWe2(uint8_t a,uint8_t x) {
 int real_packet() {
 	if(gfs_poll(d,ep[0].fifo)) {
 		printf("## GFS got setup\n");
-		ep[0].UEINTX|=1<<3;
+		ep[0].UEINTX=1<<3;
 		ep[0].fifoi=0;
 
 		intr(0x16);
@@ -213,12 +255,20 @@ int usb_poll(uint64_t d) {
 		switch(usb_state) {
 		case WAIT_INIT:
 		case WAIT_DEV: 
+		case READ_CONF: 
 			break;
 		case REQUEST_DEV:
 			sim_request_dev();
 			usb_state=WAIT_DEV;
 			break;
 		case REQUEST_CONF: 
+			sim_request_conf();
+			usb_state=WAIT_CONF;
+			break;
+		case WAIT_CONF: 
+			sim_read_conf();
+			usb_state=READ_CONF;
+			break;
 		case SET_ADDRESS: 
 			abort();
 		}
