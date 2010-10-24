@@ -588,7 +588,7 @@ int avr_MOV(uint16_t i) {
 
 int avr_RETI(uint16_t i) {
 	setI(1);
-        pc=pop16();
+        pc=pop16()-1; // it will be pc+1'ed in run
         return 4;
 }
 
@@ -614,7 +614,7 @@ int avr_ADC(uint16_t i) {
 	uint8_t r=reg(ARG_ADD_A);
 	int u=d+r+c;
 
-	setreg(r,u);
+	setreg(rd,u);
 	setZ((u&0xff)==0);
 	setNV_add(u,d,r+c);
 	set_carry(u,d,r+c);
@@ -627,7 +627,7 @@ int avr_ADD(uint16_t i) {
 	uint8_t r=reg(ARG_ADD_A);
 	int u=d+r;
 
-	setreg(r,u);
+	setreg(rd,u);
 	setZ((u&0xff)==0);
 	setNV_add(u,d,r);
 	set_carry(u,d,r);
