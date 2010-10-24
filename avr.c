@@ -244,6 +244,31 @@ void setNV_sub(uint8_t R, uint8_t d, uint8_t r) {
 	setNV(R&0x80,sub_overflow(R,d,r));
 }
 
+static int carry(uint8_t R, uint8_t d, uint8_t r, int b)
+{
+    uint8_t Rb = R >> b & 0x1;
+    uint8_t db = d >> b & 0x1;
+    uint8_t rb = r >> b & 0x1;
+    return (db & rb) | (rb & ~Rb) | (~Rb & db);
+}
+
+static void set_carry(uint8_t R, uint8_t d, uint8_t r) {
+	setC(carry(R,d,r,7));
+}
+
+static int add_overflow (uint8_t R, uint8_t d, uint8_t r)
+{
+    uint8_t R7 = R >> 7 & 0x1;
+    uint8_t d7 = d >> 7 & 0x1;
+    uint8_t r7 = r >> 7 & 0x1;
+    return (d7 & r7 & ~R7) | (~d7 & ~r7 & R7);
+}
+
+
+void setNV_add(uint8_t R, uint8_t d, uint8_t r) {
+	setNV(R&0x80,add_overflow(R,d,r));
+}
+
 void setsp(uint16_t x) {
 	mem[0x5e]=x>>8;
 	mem[0x5d]=x&0xff;
@@ -582,6 +607,47 @@ int avr_MOVW(uint16_t i) {
 	return 1;
 }
 
+int avr_ADC(uint16_t i) {
+	int c=getC();
+	uint8_t rd=ARG_ADD_B;
+	uint8_t d=reg(rd);
+	uint8_t r=reg(ARG_ADD_A);
+	int u=d+r+c;
+
+	setreg(r,u);
+	setZ((u&0xff)==0);
+	setNV_add(u,d,r+c);
+	set_carry(u,d,r+c);
+	return 1;
+}
+
+int avr_ADD(uint16_t i) {
+	uint8_t rd=ARG_ADD_B;
+	uint8_t d=reg(rd);
+	uint8_t r=reg(ARG_ADD_A);
+	int u=d+r;
+
+	setreg(r,u);
+	setZ((u&0xff)==0);
+	setNV_add(u,d,r);
+	set_carry(u,d,r);
+	return 1;
+}
+
+
+int avr_SUB(uint16_t i) {
+	uint8_t rd=ARG_SUB_B;
+	uint8_t d=reg(rd);
+	uint8_t r=reg(ARG_SUB_A);
+	int u=d-r;
+
+	setreg(rd,u);
+	setZ((u&0xff)==0);
+	setNV_sub(u,d,r);
+	set_borrow(u,d,r);
+
+	return 1;
+}
 
 int avr_SUBI(uint16_t i) {
 	uint8_t r=0x10+ARG_SUBI_B;
@@ -655,11 +721,8 @@ int avr_ADIW(uint16_t i) {
 #define avr_STDY avr_UNIMPL
 #define avr_STDZ avr_UNIMPL
 #define avr_ORI avr_UNIMPL
-#define avr_ADC avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
-#define avr_ADD avr_UNIMPL
-#define avr_SUB avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
 #define avr_BRGE avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
