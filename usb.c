@@ -31,6 +31,7 @@ static struct {
 
 	uint8_t fifo[128];
 	int fifoi;
+	int write;
 } ep[6];
 
 static void sim_usb_initspeed() {
@@ -72,6 +73,11 @@ static uint8_t avr_IORf1(uint8_t a) {
 	uint8_t x=ep[UENUM].fifo[ep[UENUM].fifoi++];
 	printf("  USB READ EP%u: %02x\n",UENUM,x);
 	return x;
+}
+
+static void avr_IOWf1(uint8_t a, uint8_t x) {
+	ep[UENUM].fifo[ep[UENUM].fifoi++]=x;
+	printf("  USB WRITE EP%u: %02x\n",UENUM,x);
 }
 
 static void avr_IOWe9(uint8_t a,uint8_t x) {
@@ -132,8 +138,11 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 	rb0(6,x,"USB EP NAKINI","ON","OFF");
 	rb0(7,x,"USB EP FIFOCON","ON","OFF");
 
-	//on RXSTPI OFF clear fifo
-	//on TXINI OFF send packet back
+	if(!(x&(1<<3))) { ep[0].fifoi=0; }
+	else if(!(x&(1<<0))) {
+		printf("on TXINI OFF send packet back!\n");
+		abort();
+	}
 
 	ep[UENUM].UEINTX=x;
 }
@@ -231,5 +240,5 @@ void usb_init() {
 	ADD_IOW(ed);
 
 	ADD_IOW(f0);
-	ADD_IOR(f1);
+	ADD_IORW(f1);
 }
