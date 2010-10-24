@@ -385,6 +385,19 @@ int avr_BRNE(uint16_t i) {
         return 1;
 }
 
+int avr_BRCS(uint16_t i) {
+	dumpSREG();
+        if (getC()) { pc+=ARG_BRCS_A; return 2; }
+        return 1;
+}
+
+
+int avr_BRCC(uint16_t i) {
+	dumpSREG();
+        if (!getC()) { pc+=ARG_BRCC_A; return 2; }
+        return 1;
+}
+
 int avr_BREQ(uint16_t i) {
 	dumpSREG();
         if (getZ()) { pc+=ARG_BREQ_A; return 2; }
@@ -436,19 +449,45 @@ int avr_CPC(uint16_t i) {
 	int c=getC();
 	uint8_t d=reg(ARG_CPC_B);
 	uint8_t r=reg(ARG_CPC_A);
+
+	printf("  CPC %02x-%02x-%u\n",d,r,c);
+
 	int u=d-r-c;
 
 	setZ((u&0xff)==0&&getZ());
 	setNV_sub(u,d,r+c);
 	set_borrow(u,d,r+c);
+	dumpSREG();
 
 	return 1;
 }
+
+int avr_CP(uint16_t i) {
+	uint8_t d=reg(ARG_CPC_B);
+	uint8_t r=reg(ARG_CPC_A);
+	int u=d-r;
+
+	printf("  CP %02x-%02x\n",d,r);
+
+	setZ((u&0xff)==0);
+	setNV_sub(u,d,r);
+	set_borrow(u,d,r);
+	dumpSREG();
+
+	return 1;
+}
+
 
 int avr_LPMZP(uint16_t i) {
 	uint16_t a=reg16(0x1e);
 	setreg(ARG_LPMZP_A,flash[a/2]>>((a&1)?8:0));
 	setreg16(0x1e,a+1);
+	return 3;
+}
+
+int avr_LPMZ(uint16_t i) {
+	uint16_t a=reg16(0x1e);
+	setreg(ARG_LPMZ_A,flash[a/2]>>((a&1)?8:0));
 	return 3;
 }
 
@@ -480,6 +519,14 @@ int avr_SBRS(uint16_t i) {
 	return 1;
 }
 
+
+int avr_SBRC(uint16_t i) {
+	if(!(reg(ARG_SBRS_A)&(1<<ARG_SBRS_B))) {
+		skipnext=1; return 2;
+	}
+	return 1;
+}
+
 int avr_SEI(uint16_t i) {
 	mem[0x5f]|=0x80;
 	return 1;
@@ -489,6 +536,16 @@ int avr_LDS(uint16_t i) {
 	setreg(ARG_LDS_A,getmem(getflash(pc)));
 	return 2;
 }
+
+int avr_ANDI(uint16_t i) {
+	uint8_t r;
+	int d=ARG_ANDI_B;
+	setreg(d,r=reg(d)&ARG_ANDI_A);
+	setZ(r==0);
+	setNV(r&0x80,0);
+	return 1;
+}
+
 
 int avr_AND(uint16_t i) {
 	uint8_t r;
@@ -544,33 +601,50 @@ int avr_SBCI(uint16_t i) {
 	int c=getC();
 	int rd=ARG_SBCI_B+0x10;
 	uint8_t d=reg(rd);
-	uint8_t r=reg(ARG_SBCI_A);
-	int u=d-r-c;
+	uint8_t k=ARG_SBCI_A;
+	int u=d-k-c;
 	
 	setreg(rd,u);
 	setZ((u&0xff)==0&&getZ());
-	setNV_sub(u,d,r+c);
-	set_borrow(u,d,r+c);
+	setNV_sub(u,d,k+c);
+	set_borrow(u,d,k+c);
 
 	return 1;
 }
 
 int avr_SBIW(uint16_t i) {
-	int rd=ARG_SBIW_B+24;
+	int rd=ARG_SBIW_B*2+24;
+	printf("  SBIW rd=%u (%u)\n",rd,ARG_SBIW_B);
 	uint16_t d=reg16(rd);
 	uint8_t k=ARG_SBIW_A;
 	uint16_t u=d-k;
 	
 	setreg16(rd,u);
-	setZ((u&0xff)==0&&getZ());
+	setZ(u==0);
 	setNV(u&0x8000,(d&0x8000)&&!(u&0x8000));
 	setC(u&0x8000&&!(d&0x8000));
 
 	return 2;
 }
 
+int avr_ADIW(uint16_t i) {
+	int rd=ARG_ADIW_B*2+24;
+	uint16_t d=reg16(rd);
+	uint8_t k=ARG_ADIW_A;
+	uint16_t u=d+k;
+
+	setreg16(rd,u);
+	setZ(u==0);
+	setNV(u&0x8000,(u&0x8000)&&!(d&0x8000));
+	setC(d&0x8000&&!(u&0x8000));
+
+	return 2;
+}
+
+
+
+
 #define avr_UNIMPL (0)
-#define avr_LPMZ avr_UNIMPL
 #define avr_LDZP avr_UNIMPL
 #define avr_LDX avr_UNIMPL
 #define avr_LDDZ avr_UNIMPL
@@ -580,7 +654,6 @@ int avr_SBIW(uint16_t i) {
 #define avr_STZ avr_UNIMPL
 #define avr_STDY avr_UNIMPL
 #define avr_STDZ avr_UNIMPL
-#define avr_ANDI avr_UNIMPL
 #define avr_ORI avr_UNIMPL
 #define avr_ADC avr_UNIMPL
 #define avr_LSR avr_UNIMPL
@@ -588,12 +661,7 @@ int avr_SBIW(uint16_t i) {
 #define avr_ADD avr_UNIMPL
 #define avr_SUB avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
-#define avr_CP avr_UNIMPL
-#define avr_ADIW avr_UNIMPL
-#define avr_SBRC avr_UNIMPL
-#define avr_BRCS avr_UNIMPL
 #define avr_BRGE avr_UNIMPL
-#define avr_BRCC avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
 #define avr_SEC avr_UNIMPL
 #define avr_CLI avr_UNIMPL
