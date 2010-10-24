@@ -218,6 +218,32 @@ void setNV(int n,int v) {
 	}
 }
 
+
+static int borrow(uint8_t R, uint8_t d, uint8_t r, int b)
+{
+    uint8_t Rb = R >> b & 0x1;
+    uint8_t db = d >> b & 0x1;
+    uint8_t rb = r >> b & 0x1;
+    return (~db & rb) | (rb & Rb) | (Rb & ~db);
+}
+
+static void set_borrow(uint8_t R, uint8_t d, uint8_t r) {
+	setC(borrow(R,d,r,7));
+}
+
+
+static int sub_overflow (uint8_t R, uint8_t d, uint8_t r)
+{
+    uint8_t R7 = R >> 7 & 0x1;
+    uint8_t d7 = d >> 7 & 0x1;
+    uint8_t r7 = r >> 7 & 0x1;
+    return (d7 & ~r7 & ~R7) | (~d7 & r7 & R7);
+}
+
+void setNV_sub(uint8_t R, uint8_t d, uint8_t r) {
+	setNV(R&0x80,sub_overflow(R,d,r));
+}
+
 void setsp(uint16_t x) {
 	mem[0x5e]=x>>8;
 	mem[0x5d]=x&0xff;
@@ -398,11 +424,10 @@ int avr_CPI(uint16_t i) {
 	uint8_t d=reg(0x10+ARG_CPI_B);
 	uint8_t k=ARG_CPI_A;
 	int u=d-k;
-	int s=(int8_t)d-(int8_t)k;
 
 	setZ((u&0xff)==0);
-	setNV(u&0x80,s<-128||s>128);
-	setC(u<0||u>255);
+	setNV_sub(u,d,k);
+	set_borrow(u,d,k);
 
 	return 1;
 }
@@ -412,11 +437,10 @@ int avr_CPC(uint16_t i) {
 	uint8_t d=reg(ARG_CPC_B);
 	uint8_t r=reg(ARG_CPC_A);
 	int u=d-r-c;
-	int s=(int8_t)d-(int8_t)r-c;
 
 	setZ((u&0xff)==0&&getZ());
-	setNV(u&0x80,s<-128||s>128);
-	setC(u<0||u>255);
+	setNV_sub(u,d,r+c);
+	set_borrow(u,d,r+c);
 
 	return 1;
 }
@@ -489,15 +513,63 @@ int avr_RETI(uint16_t i) {
 
 int avr_OR(uint16_t i) {
 	uint8_t r;
-	int d=ARG_AND_B;
-	setreg(d,r=reg(d)|reg(ARG_AND_A));
+	int d=ARG_OR_B;
+	setreg(d,r=reg(d)|reg(ARG_OR_A));
 	setZ(r==0);
 	setNV(r&0x80,0);
 	return 1;
 }
 
+int avr_MOVW(uint16_t i) {
+	setreg16(ARG_MOVW_A*2,reg16(ARG_MOVW_B*2));
+	return 1;
+}
+
+
+int avr_SUBI(uint16_t i) {
+	uint8_t r=0x10+ARG_SUBI_B;
+	uint8_t d=reg(r);
+	uint8_t k=ARG_SUBI_A;
+	int u=d-k;
+
+	setreg(r,u);
+	setZ((u&0xff)==0);
+	setNV_sub(u,d,k);
+	set_borrow(u,d,k);
+
+	return 1;
+}
+
+int avr_SBCI(uint16_t i) {
+	int c=getC();
+	int rd=ARG_SBCI_B+0x10;
+	uint8_t d=reg(rd);
+	uint8_t r=reg(ARG_SBCI_A);
+	int u=d-r-c;
+	
+	setreg(rd,u);
+	setZ((u&0xff)==0&&getZ());
+	setNV_sub(u,d,r+c);
+	set_borrow(u,d,r+c);
+
+	return 1;
+}
+
+int avr_SBIW(uint16_t i) {
+	int rd=ARG_SBIW_B+24;
+	uint16_t d=reg16(rd);
+	uint8_t k=ARG_SBIW_A;
+	uint16_t u=d-k;
+	
+	setreg16(rd,u);
+	setZ((u&0xff)==0&&getZ());
+	setNV(u&0x8000,(d&0x8000)&&!(u&0x8000));
+	setC(u&0x8000&&!(d&0x8000));
+
+	return 2;
+}
+
 #define avr_UNIMPL (0)
-#define avr_MOVW avr_UNIMPL
 #define avr_LPMZ avr_UNIMPL
 #define avr_LDZP avr_UNIMPL
 #define avr_LDX avr_UNIMPL
@@ -510,15 +582,12 @@ int avr_OR(uint16_t i) {
 #define avr_STDZ avr_UNIMPL
 #define avr_ANDI avr_UNIMPL
 #define avr_ORI avr_UNIMPL
-#define avr_SBCI avr_UNIMPL
 #define avr_ADC avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
 #define avr_ADD avr_UNIMPL
 #define avr_SUB avr_UNIMPL
-#define avr_SUBI avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
-#define avr_SBIW avr_UNIMPL
 #define avr_CP avr_UNIMPL
 #define avr_ADIW avr_UNIMPL
 #define avr_SBRC avr_UNIMPL
