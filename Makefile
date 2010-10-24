@@ -1,9 +1,9 @@
-CFLAGS=-Wall -Werror -O6
+CFLAGS=-Wall -Werror -g
 
 run: avr
 	./avr example.bin
 
-avr: avr.o gfs.o
+avr: avr.o usb.o gfs.o
 
 avr.o: avr.c decode.inc io.inc
 

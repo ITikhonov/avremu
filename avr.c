@@ -12,6 +12,8 @@
 #undef NDEBUG
 #include <assert.h>
 
+extern void usb_poll(uint64_t d);
+
 int gfs_init();
 int gfs_poll(uint64_t ns, uint8_t *r);
 
@@ -66,40 +68,6 @@ void rl(int bit,uint8_t n,char *name) {
 
 /**************************************************************/
 
-void setI(int);
-void push16(uint16_t);
-
-struct {
-	uint8_t eb,ec,ed,f0;
-	uint8_t fifo[128];
-	int fifoi;
-} sim_usb_ep[6];
-
-void sim_usb_initspeed() {
-	printf("!! USB INIT SPEED\n");
-
-	mem[0xe1]=1<<3;
-	push16(pc);
-	setI(0);
-	pc=0x14;
-}
-
-
-uint8_t pkt_setaddr[]={0x00,0x05,0x12,0x34,0x00,0x00};
-
-void sim_usb_setaddr() {
-	printf("!! USB SETADDR\n");
-	mem[0xe8]=1<<3;
-	memcpy(sim_usb_ep[0].fifo,pkt_setaddr,sizeof(pkt_setaddr));
-	sim_usb_ep[0].fifoi=0;
-
-	push16(pc);
-	setI(0);
-	pc=0x16;
-}
-
-/**************************************************************/
-
 uint64_t plllock_at=0;
 
 typedef void (*sched_func)(void);
@@ -135,20 +103,6 @@ void schedules() {
 
 #include "ioundef.inc"
 
-#undef avr_IORe1
-#undef avr_IOWe1
-uint8_t avr_IORe1(uint8_t a) { return mem[0xe1]; }
-void avr_IOWe1(uint8_t a, uint8_t x) { mem[0xe1]=x; }
-
-
-#undef avr_IORf1
-uint8_t avr_IORf1(uint8_t a) {
-	printf("  USB READ EP%u\n",mem[0xe9]&7);
-	uint8_t x=sim_usb_ep[mem[0xe9]&7].fifo[sim_usb_ep[mem[0xe9]&7].fifoi++];
-	printf("  USB READ EP%u: %02x\n",mem[0xe9]&7,x);
-	return x;
-}
-
 #undef avr_IOW2a
 void avr_IOW2a(uint8_t a,uint8_t x) {
 	uint8_t o=mem[a];
@@ -173,74 +127,6 @@ void avr_IOW2b(uint8_t a,uint8_t x) {
 	mem[a]=x;
 }
 
-#undef avr_IOWe9
-void avr_IOWe9(uint8_t a,uint8_t x) {
-	printf("  USB SELECT: EP%u\n", x&7);
-	mem[a]=x;
-}
-
-
-#undef avr_IOWeb
-void avr_IOWeb(uint8_t a,uint8_t x) {
-	rb0(0,x,"USB EP ENABLED","ON","OFF");
-	rl(3,x,"USB DATA TOGGLE RESET");
-	rl(4,x,"USB DISABLE STALL");
-	rl(5,x,"USB STALL REQUEST");
-
-	sim_usb_ep[mem[0xe9]&7].eb=x;
-}
-
-#undef avr_IOWec
-void avr_IOWec(uint8_t a,uint8_t x) {
-	rb0(0,x,"USB EP DIRECTION","IN","OUT");
-	char *ept[4]={"CONTROL","ISOCHRONOUS","BULK","INTERRUPT"};
-	printf("  USB EP TYPE: %s\n",ept[x>>6]);
-	sim_usb_ep[mem[0xe9]&7].ec=x;
-}
-
-#undef avr_IOWed
-void avr_IOWed(uint8_t a,uint8_t x) {
-	rb0(1,x,"USB EP MEMORY","ALLOC","FREE");
-	rb0(2,x,"USB EP BANKS","2","1");
-	printf("  USB EP SIZE: %u\n",8<<((x>>4)&7));
-	sim_usb_ep[mem[0xe9]&7].ed=x;
-}
-
-
-#undef avr_IOWf0
-void avr_IOWf0(uint8_t a,uint8_t x) {
-	rb0(0,x,"USB EP TXINE","ON","OFF");
-	rb0(1,x,"USB EP STALLEDE","ON","OFF");
-	rb0(2,x,"USB EP RXOUTE","ON","OFF");
-	rb0(3,x,"USB EP RXSTPE","ON","OFF");
-	rb0(4,x,"USB EP NAKOUTE","ON","OFF");
-	rb0(6,x,"USB EP NAKINE","ON","OFF");
-	rb0(7,x,"USB EP FLERRE","ON","OFF");
-
-	// if(x&(1<<3)) { schedule(250,sim_usb_setaddr); }
-	sim_usb_ep[mem[0xe9]&7].f0=x;
-}
-
-#undef avr_IORe8
-uint8_t avr_IORe8(uint8_t a) { return mem[a]; }
-#undef avr_IOWe8
-void avr_IOWe8(uint8_t a, uint8_t x) {
-	rb0(0,x,"USB EP TXINI","ON","OFF");
-	rb0(1,x,"USB EP STALLEDI","ON","OFF");
-	rb0(2,x,"USB EP RXOUTI","ON","OFF");
-	rb0(3,x,"USB EP RXSTPI","ON","OFF");
-	rb0(4,x,"USB EP NAKOUTI","ON","OFF");
-	rb0(5,x,"USB EP RWAL","ON","OFF");
-	rb0(6,x,"USB EP NAKINI","ON","OFF");
-	rb0(7,x,"USB EP FIFOCON","ON","OFF");
-
-	if((x&1)==0) {
-		//ask for descriptor
-	}
-
-	mem[a]=a;
-}
-
 #undef avr_IOR5f
 uint8_t avr_IOR5f(uint8_t a) { return mem[a]; }
 #undef avr_IOW5f
@@ -256,27 +142,6 @@ void avr_IOW5d(uint8_t a,uint8_t x) { mem[a]=x; }
 void avr_IOW61(uint8_t a,uint8_t x) {
 	if(x==0x80) { printf("  CLKPCE\n"); }
 	else { printf("  CLKPS:%x\n",1<<(x&0xf)); }
-	mem[a]=x;
-}
-
-#undef avr_IOWd7
-void avr_IOWd7(uint8_t a,uint8_t x) {
-	if((x&1)!=(mem[a]&1)) { printf("  USB Pad Regulator: %s\n",x&1?"ENABLED":"DISABLED"); }
-	mem[a]=x;
-}
-
-#undef avr_IOWd8
-void avr_IOWd8(uint8_t a,uint8_t x) {
-	uint8_t o=mem[a];
-	rb(7,x,o,"USB","ON","OFF");
-	rb(5,x,o,"USB CLOCK","FREEZED","ENABLED");
-	rb(4,x,o,"USB VBUS PAD","ON","OFF");
-	rb(0,x,o,"USB VBUS INT","ON","OFF");
-
-	if(!(x&(1<<5))) {
-		gfs_init();
-		schedule(250,sim_usb_initspeed);
-	}
 	mem[a]=x;
 }
 
@@ -300,28 +165,6 @@ void avr_IOW49(uint8_t a,uint8_t x) {
 	rb(1,x,o,"PLL","ON","OFF");
 	if(x&2) { schedule(250,plllock); } else { x=x&0xfe; }
 	mem[a]=x;
-}
-
-#undef avr_IOWe0
-void avr_IOWe0(uint8_t a,uint8_t x) {
-	uint8_t o=mem[a];
-	rb(3,x,o,"USB Reset CPU","ON","OFF");
-	rb(2,x,o,"USB Low Speed","ON","OFF");
-	rb(1,x,o,"USB Remote Wake-up","SEND","WTF");
-	rb(0,x,o,"USB Detach","ON","OFF");
-	mem[a]=x;
-}
-
-#undef avr_IOWe2
-void avr_IOWe2(uint8_t a,uint8_t x) {
-        uint8_t o=mem[a];
-	rb(6,x,o,"USB UPRSMI","ON","OFF");
-	rb(5,x,o,"USB EORSMI","ON","OFF");
-	rb(4,x,o,"USB WAKEUPI","ON","OFF");
-	rb(3,x,o,"USB EORSTI","ON","OFF");
-	rb(2,x,o,"USB SOFI","ON","OFF");
-	rb(0,x,o,"USB SUSPI","ON","OFF");
-        mem[a]=x;
 }
 
 #include "io.inc"
@@ -354,7 +197,7 @@ void setio(unsigned int addr, uint8_t v) {
 void setmem(unsigned int addr,uint8_t v) {
 	if(addr<0x20) { setreg(addr,v); }
 	else if(addr<0x100) { setio(addr,v); }
-	else if(addr<0x4000) {
+	else if(addr<0xb00) {
 		mem[addr]=v;
 		LOG("  [%04x]=%02x\n",addr,v);
 	} else {
@@ -363,6 +206,7 @@ void setmem(unsigned int addr,uint8_t v) {
 	}
 }
 
+int getI(int x) { return (mem[0x5f]&0x80)?1:0; }
 void setI(int x) { mem[0x5f]&=~0x80; if(x) mem[0x5f]|=0x80; }
 void setZ(int x) { mem[0x5f]&=~0x02; if(x) mem[0x5f]|=0x02; }
 void setC(int x) { mem[0x5f]&=~0x01; if(x) mem[0x5f]|=0x01; }
@@ -745,25 +589,7 @@ void run() {
 			int clocksdone=inst_funcs[f](i);
 			clocks+=clocksdone;
 			delay_clock+=clocksdone;
-			uint64_t d=0;
-			
-			if(delay_clock>1000 && delay.tv_nsec) {
-				d=delay.tv_nsec;
-			} else { d=1; }
 
-			if(sim_usb_ep[0].f0&(1<<3)) {
-				if(gfs_poll(d,sim_usb_ep[0].fifo)) {
-					printf("## GFS got setup\n");
-					mem[0xe8]|=1<<3;
-					sim_usb_ep[0].fifoi=0;
-
-					push16(pc+1);
-					setI(0);
-					pc=0x16;
-					continue;
-				}
-			}
-			delay_clock=0;
 		} else {
 			printf("instruction %s (%04x at %04x) not implemented\n",inst_names[f],i,pc*2);
 			char buf[1024];
@@ -773,9 +599,31 @@ void run() {
 		}
 		pc++;
 
+		if(delay_clock>1000 && delay.tv_nsec) {
+			nanosleep(&delay,0);
+			delay_clock=0;
+		}
+
+		usb_poll(0);
 		schedules();
 	}
 }
+
+void intr(uint8_t a) {
+        push16(pc);
+        setI(0);
+        pc=a;
+}
+
+void add_ior(uint8_t a,io_read_func f) {
+	printf("add ior for %x\n",a);
+	io_read_funcs[a-0x20]=f;
+}
+void add_iow(uint8_t a,io_write_func f) {
+	printf("add ior for %x\n",a);
+	io_write_funcs[a-0x20]=f;
+}
+
 
 void reset() {
 	setsp(0xaff);
@@ -783,10 +631,14 @@ void reset() {
 	pc=0;
 	clocks=0;
 	skipnext=0;
+
 }
+
+void usb_init();
 
 int main(int argc, char *argv[]) {
 	setlinebuf(stdout);
+	usb_init();
 
 	load(argv[1]);
 	reset();
