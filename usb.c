@@ -14,7 +14,7 @@
 
 #include "common.h"
 
-int gfs_init();
+void gfs_init(uint8_t *devdesc, uint8_t *confdesc, unsigned int conflen);
 int gfs_poll(uint64_t ns, uint8_t *r);
 
 static uint8_t UDINT; // 0xe1
@@ -69,6 +69,10 @@ static void sim_request_conf() {
 static void sim_read_conf() {
 	printf("!! USB READ CONF\n");
 	ep[0].UEINTX|=1;
+}
+
+static void sim_init_gfs() {
+	gfs_init(devdesc,confdesc,confdesci);
 }
 
 #if 0
@@ -179,7 +183,7 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 				abort();
 			} else if(confdesci==(confdesc[2]|(confdesc[3]<<8))) {
 				printf("conf read size %u\n",confdesci);
-				abort();
+				sim_init_gfs();
 			}
 			break;
 		default:;
