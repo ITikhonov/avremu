@@ -24,7 +24,11 @@ uint8_t devdesc[18];
 uint8_t confdesc[65535];
 int confdesci=0;
 
-static enum {WAIT_INIT,REQUEST_DEV,WAIT_DEV,REQUEST_CONF,WAIT_CONF,READ_CONF,SET_ADDRESS} usb_state=WAIT_INIT;
+uint8_t usbbuf[65535];
+int usbbufi=0;
+int usbwant=0;
+
+static enum {WAIT_INIT,REQUEST_DEV,WAIT_DEV,REQUEST_CONF,WAIT_CONF,READ_CONF,OPERATE} usb_state=WAIT_INIT;
 
 static struct {
 	uint8_t UEINTX; // e8
@@ -44,7 +48,7 @@ static void sim_usb_initspeed() {
 }
 
 
-static uint8_t pkt_request_dev[8]={0x00,0x06, 0x00,0x01, 0x00,0x00, 0x12,0x00};
+static uint8_t pkt_request_dev[8]={0x80,0x06, 0x00,0x01, 0x00,0x00, 0x12,0x00};
 
 static void sim_request_dev() {
 	printf("!! USB REQUEST DEV\n");
@@ -55,7 +59,7 @@ static void sim_request_dev() {
 }
 
 
-static uint8_t pkt_request_conf[8]={0x00,0x06, 0x00,0x02, 0x00,0x00, 0xff,0xff};
+static uint8_t pkt_request_conf[8]={0x80,0x06, 0x00,0x02, 0x00,0x00, 0xff,0xff};
 
 static void sim_request_conf() {
 	printf("!! USB REQUEST CONF\n");
@@ -73,6 +77,42 @@ static void sim_read_conf() {
 
 static void sim_init_gfs() {
 	gfs_init(devdesc,confdesc,confdesci);
+}
+
+static void sim_operate() {
+	if(gfs_poll(1,ep[0].fifo)) {
+		usbwant=ep[0].fifo[6]|(ep[0].fifo[7]<<8);
+		usbbufi=0;
+		printf("  USB SETUP ARRIVED FOR %u BYTES\n",usbwant);
+		ep[0].fifoi=0;
+
+		int i;
+		printf("RX:");
+		for(i=0;i<8;i++) { printf(" %02x",ep[0].fifo[i]); }
+		printf("\n");
+
+		ep[0].UEINTX|=1<<3;
+		intr(0x16);
+	}
+}
+
+void gfs_write(uint8_t *d, unsigned int len);
+
+static void sim_gfs_write() {
+	memcpy(usbbuf+usbbufi,ep[0].fifo,ep[0].fifoi);
+	usbbufi+=ep[0].fifoi;
+	printf("  GFS WRITE %u (%u of %u)\n",ep[0].fifoi,usbbufi,usbwant);
+	if(usbbufi>usbwant) {
+		printf("writing too many (%u, only need %u)\n",usbbufi,usbwant);
+		abort();
+	} else if(usbbufi==usbwant) {
+		gfs_write(ep[0].fifo,ep[0].fifoi);
+		usbbufi=0;
+		ep[0].fifoi=0;
+	} else {
+		ep[0].UEINTX|=1;
+		ep[0].fifoi=0;
+	}
 }
 
 #if 0
@@ -184,7 +224,11 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 			} else if(confdesci==(confdesc[2]|(confdesc[3]<<8))) {
 				printf("conf read size %u\n",confdesci);
 				sim_init_gfs();
+				usb_state=OPERATE;
 			}
+			break;
+		case OPERATE:
+			sim_gfs_write();
 			break;
 		default:;
 		}
@@ -240,20 +284,6 @@ static void avr_IOWe2(uint8_t a,uint8_t x) {
 }
 
 
-#if 0
-int real_packet() {
-	if(gfs_poll(d,ep[0].fifo)) {
-		printf("## GFS got setup\n");
-		ep[0].UEINTX=1<<3;
-		ep[0].fifoi=0;
-
-		intr(0x16);
-		return 1;
-	}
-	return 0;
-}
-#endif
-
 int usb_poll(uint64_t d) {
 	if(getI() && ep[0].UEIENX&(1<<3)) {
 		switch(usb_state) {
@@ -273,8 +303,8 @@ int usb_poll(uint64_t d) {
 			sim_read_conf();
 			usb_state=READ_CONF;
 			break;
-		case SET_ADDRESS: 
-			abort();
+		case OPERATE:
+			sim_operate();
 		}
 	}
 	return 0;
@@ -296,3 +326,4 @@ void usb_init() {
 	ADD_IOW(f0);
 	ADD_IORW(f1);
 }
+

@@ -29,7 +29,7 @@ void gfs_init(uint8_t *devdesc, uint8_t *confdesc, unsigned int conflen) {
 	int len=4+conflen*2+18;
 
 	if(write(ep0.fd,buf,len)!=len) {
-		perror("GadgetFS sorta fucked");
+		perror("GadgetFS initialization failed");
 		printf("May be\nsudo mkdir /dev/gadget\n");
 		printf("id -u | sudo tee /sys/module/gadgetfs/parameters/default_uid\n");
 		printf("sudo mount -t gadgetfs gadgetfs /dev/gadget\n");
@@ -37,6 +37,22 @@ void gfs_init(uint8_t *devdesc, uint8_t *confdesc, unsigned int conflen) {
 	}
 
 	printf("GadgetFS initialized\n");
+}
+
+void gfs_write(uint8_t *d, unsigned int len) {
+	if(len==0) {
+		int ret=read(ep0.fd,&ret,0);
+		if(ret) {
+			perror("GadgetFS zero write failed");
+			abort();
+		}
+		return;
+	}
+
+	if(write(ep0.fd,d,len)!=len) {
+		perror("GadgetFS write failed");
+		abort();
+	}
 }
 
 int gfs_poll(uint64_t ns, uint8_t *r) {

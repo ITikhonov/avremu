@@ -463,6 +463,8 @@ int avr_CPI(uint16_t i) {
 	uint8_t k=ARG_CPI_A;
 	int u=d-k;
 
+	printf("  CPI %02x-%02x\n",d,k);
+
 	setZ((u&0xff)==0);
 	setNV_sub(u,d,k);
 	set_borrow(u,d,k);

@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Werror -g
+CFLAGS=-Wall -Werror -O6
 
 run: avr
 	./avr example.bin
