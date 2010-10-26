@@ -13,23 +13,14 @@
 #include <assert.h>
 
 #include "common.h"
-
-void gfs_init(uint8_t *devdesc, uint8_t *confdesc, unsigned int conflen);
-int gfs_poll(uint64_t ns, uint8_t *r);
+#include "qemu.h"
 
 static uint8_t UDINT; // 0xe1
 static uint8_t UENUM; // 0xe9
 
-uint8_t devdesc[18];
-int devdesci=0;
-uint8_t confdesc[65535];
-int confdesci=0;
-
 uint8_t usbbuf[65535];
 int usbbufi=0;
 int usbwant=0;
-
-static enum {WAIT_INIT,REQUEST_DEV,WAIT_DEV,REQUEST_CONF,WAIT_CONF,READ_CONF,OPERATE} usb_state=WAIT_INIT;
 
 static struct {
 	uint8_t UEINTX; // e8
@@ -44,44 +35,14 @@ static struct {
 
 static void sim_usb_initspeed() {
 	printf("!! USB INIT SPEED\n");
+	qemu_attach();
 	UDINT=1<<3;
 	intr(0x14);
 }
 
 
-static uint8_t pkt_request_dev[8]={0x80,0x06, 0x00,0x01, 0x00,0x00, 0x12,0x00};
-
-static void sim_request_dev() {
-	printf("!! USB REQUEST DEV\n");
-	ep[0].UEINTX|=1<<3;
-	memcpy(ep[0].fifo,pkt_request_dev,sizeof(pkt_request_dev));
-	ep[0].fifoi=0;
-	intr(0x16);
-}
-
-
-static uint8_t pkt_request_conf[8]={0x80,0x06, 0x00,0x02, 0x00,0x00, 0xff,0xff};
-
-static void sim_request_conf() {
-	printf("!! USB REQUEST CONF\n");
-	ep[0].UEINTX|=1<<3;
-	memcpy(ep[0].fifo,pkt_request_conf,sizeof(pkt_request_conf));
-	ep[0].fifoi=0;
-	intr(0x16);
-}
-
-
-static void sim_read_conf() {
-	printf("!! USB READ CONF\n");
-	ep[0].UEINTX|=1;
-}
-
-static void sim_init_gfs() {
-	gfs_init(devdesc,confdesc,confdesci);
-}
-
 static void sim_operate() {
-	if(gfs_poll(1,ep[0].fifo)) {
+	if(qemu_poll(1,ep[0].fifo)) {
 		usbwant=ep[0].fifo[6]|(ep[0].fifo[7]<<8);
 		usbbufi=0;
 		printf("  USB SETUP ARRIVED FOR %u BYTES\n",usbwant);
@@ -97,17 +58,23 @@ static void sim_operate() {
 	}
 }
 
-void gfs_write(uint8_t *d, unsigned int len);
-
 static void sim_gfs_write() {
 	memcpy(usbbuf+usbbufi,ep[0].fifo,ep[0].fifoi);
 	usbbufi+=ep[0].fifoi;
 	printf("  GFS WRITE %u (%u of %u)\n",ep[0].fifoi,usbbufi,usbwant);
+
+	int usbsend;
+	if(usbbuf[1]==0x02) {
+		usbsend=usbbuf[2]|(usbbuf[3]<<8);
+	} else {
+		usbsend=usbbuf[0];
+	}
+
 	if(usbbufi>usbwant) {
 		printf("writing too many (%u, only need %u)\n",usbbufi,usbwant);
 		abort();
-	} else if(usbbufi==usbwant) {
-		gfs_write(ep[0].fifo,ep[0].fifoi);
+	} else if(usbbufi==usbwant || usbbufi==usbsend) {
+		qemu_write(usbbuf,usbbufi);
 		usbbufi=0;
 		ep[0].fifoi=0;
 	} else {
@@ -157,7 +124,6 @@ static void avr_IOWeb(uint8_t a,uint8_t x) {
 	rl(4,x,"USB DISABLE STALL");
 	rl(5,x,"USB STALL REQUEST");
 
-	if(UENUM==0 && x&1 && (!(ep[UENUM].UECONX&1))) { usb_state=REQUEST_DEV; }
 	ep[UENUM].UECONX=x;
 }
 
@@ -222,36 +188,7 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 		for(i=0;i<ep[0].fifoi;i++) { printf(" %02x",ep[0].fifo[i]); }
 		printf("\n");
 
-		switch(usb_state) {
-		case WAIT_DEV:
-			memcpy(devdesc+devdesci,ep[0].fifo,ep[0].fifoi);
-			devdesci+=ep[0].fifoi;
-			if(devdesci==18) {
-				usb_state=REQUEST_CONF;
-			} else if(devdesci<18) {
-			} else {
-				printf("read more then devdesc size %u\n",devdesci);
-				abort();
-			}
-			break;
-		case WAIT_CONF:
-			memcpy(confdesc+confdesci,ep[0].fifo,ep[0].fifoi);
-			confdesci+=ep[0].fifoi;
-			if(confdesci>(confdesc[2]|(confdesc[3]<<8))) {
-				printf("read more then confdesc size %u\n",confdesci);
-				abort();
-			} else if(confdesci==(confdesc[2]|(confdesc[3]<<8))) {
-				printf("conf read size %u\n",confdesci);
-				sim_init_gfs();
-				usb_state=OPERATE;
-			}
-			break;
-		case OPERATE:
-			sim_gfs_write();
-			break;
-		default:;
-		}
-
+		sim_gfs_write();
 		ep[0].fifoi=0;
 	}
 }
@@ -305,26 +242,7 @@ static void avr_IOWe2(uint8_t a,uint8_t x) {
 
 int usb_poll(uint64_t d) {
 	if(getI() && ep[0].UEIENX&(1<<3)) {
-		switch(usb_state) {
-		case WAIT_INIT:
-		case WAIT_DEV: 
-		case READ_CONF: 
-			break;
-		case REQUEST_DEV:
-			sim_request_dev();
-			usb_state=WAIT_DEV;
-			break;
-		case REQUEST_CONF: 
-			sim_request_conf();
-			usb_state=WAIT_CONF;
-			break;
-		case WAIT_CONF: 
-			sim_read_conf();
-			usb_state=READ_CONF;
-			break;
-		case OPERATE:
-			sim_operate();
-		}
+		sim_operate();
 	}
 	return 0;
 }
@@ -345,5 +263,7 @@ void usb_init() {
 
 	ADD_IOW(f0);
 	ADD_IORW(f1);
+
+	qemu_init();
 }
 

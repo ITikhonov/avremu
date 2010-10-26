@@ -5,7 +5,7 @@ all: avr
 run: avr
 	./avr example.bin
 
-avr: avr.o usb.o gfs.o
+avr: avr.o usb.o qemu.o
 
 avr.o: avr.c decode.inc io.inc
 
