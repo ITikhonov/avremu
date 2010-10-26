@@ -1,5 +1,7 @@
 CFLAGS=-Wall -Werror -O6
 
+all: avr
+
 run: avr
 	./avr example.bin
 

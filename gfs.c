@@ -28,6 +28,12 @@ void gfs_init(uint8_t *devdesc, uint8_t *confdesc, unsigned int conflen) {
 	memcpy(buf+4+conflen*2,devdesc,18);
 	int len=4+conflen*2+18;
 
+	int i;
+	printf("  GFS INIT %u:",len);
+	for(i=0;i<len;i++) { printf(" %02x",buf[i]); }
+	printf("\n");
+
+
 	if(write(ep0.fd,buf,len)!=len) {
 		perror("GadgetFS initialization failed");
 		printf("May be\nsudo mkdir /dev/gadget\n");

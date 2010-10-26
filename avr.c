@@ -132,10 +132,14 @@ uint8_t avr_IOR5f(uint8_t a) { return mem[a]; }
 #undef avr_IOW5f
 void avr_IOW5f(uint8_t a,uint8_t x) { mem[a]=x; }
 
+#undef avr_IOR5e
 #undef avr_IOW5e
+uint8_t avr_IOR5e(uint8_t a) { return mem[a]; }
 void avr_IOW5e(uint8_t a,uint8_t x) { mem[a]=x; }
 
+#undef avr_IOR5d
 #undef avr_IOW5d
+uint8_t avr_IOR5d(uint8_t a) { return mem[a]; }
 void avr_IOW5d(uint8_t a,uint8_t x) { mem[a]=x; }
 
 #undef avr_IOW61
@@ -555,7 +559,13 @@ int avr_SBRC(uint16_t i) {
 }
 
 int avr_SEI(uint16_t i) {
-	mem[0x5f]|=0x80;
+	setI(1);
+	return 1;
+}
+
+
+int avr_CLI(uint16_t i) {
+	setI(0);
 	return 1;
 }
 
@@ -729,7 +739,6 @@ int avr_ADIW(uint16_t i) {
 #define avr_BRGE avr_UNIMPL
 #define avr_BRPL avr_UNIMPL
 #define avr_SEC avr_UNIMPL
-#define avr_CLI avr_UNIMPL
 
 /**************************************************************/
 

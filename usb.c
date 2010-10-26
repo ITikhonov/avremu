@@ -21,6 +21,7 @@ static uint8_t UDINT; // 0xe1
 static uint8_t UENUM; // 0xe9
 
 uint8_t devdesc[18];
+int devdesci=0;
 uint8_t confdesc[65535];
 int confdesci=0;
 
@@ -175,6 +176,17 @@ static void avr_IOWed(uint8_t a,uint8_t x) {
 }
 
 
+static void avr_IOWea(uint8_t a,uint8_t x) {
+	rb0(0,x,"USB EP0 RST","ON","OFF");
+	rb0(1,x,"USB EP1 RST","ON","OFF");
+	rb0(2,x,"USB EP2 RST","ON","OFF");
+	rb0(3,x,"USB EP3 RST","ON","OFF");
+	rb0(4,x,"USB EP4 RST","ON","OFF");
+	rb0(5,x,"USB EP5 RST","ON","OFF");
+	rb0(6,x,"USB EP6 RST","ON","OFF");
+	rb0(7,x,"USB EP7 RST","ON","OFF");
+}
+
 static void avr_IOWf0(uint8_t a,uint8_t x) {
 	rb0(0,x,"USB EP TXINE","ON","OFF");
 	rb0(1,x,"USB EP STALLEDE","ON","OFF");
@@ -212,8 +224,15 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 
 		switch(usb_state) {
 		case WAIT_DEV:
-			memcpy(devdesc,ep[0].fifo,18);
-			usb_state=REQUEST_CONF;
+			memcpy(devdesc+devdesci,ep[0].fifo,ep[0].fifoi);
+			devdesci+=ep[0].fifoi;
+			if(devdesci==18) {
+				usb_state=REQUEST_CONF;
+			} else if(devdesci<18) {
+			} else {
+				printf("read more then devdesc size %u\n",devdesci);
+				abort();
+			}
 			break;
 		case WAIT_CONF:
 			memcpy(confdesc+confdesci,ep[0].fifo,ep[0].fifoi);
@@ -319,6 +338,7 @@ void usb_init() {
 	ADD_IOW(e2);
 	ADD_IORW(e8);
 	ADD_IOW(e9);
+	ADD_IOW(ea);
 	ADD_IOW(eb);
 	ADD_IOW(ec);
 	ADD_IOW(ed);
