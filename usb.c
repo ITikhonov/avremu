@@ -42,16 +42,20 @@ static void sim_usb_initspeed() {
 static void sim_operate() {
 	int ret;
 	if((ret=qemu_poll(1,ep[0].fifo))) {
-		ep[0].fifoi=0;
-		if(ret==1) usbpid=SETUP;
+		if(ret==1) {
+			ep[0].fifoi=0;
+			usbpid=SETUP;
 
-		int i;
-		printf("RX:");
-		for(i=0;i<8;i++) { printf(" %02x",ep[0].fifo[i]); }
-		printf("\n");
+			int i;
+			printf("RX:");
+			for(i=0;i<8;i++) { printf(" %02x",ep[0].fifo[i]); }
+			printf("\n");
 
-		ep[0].UEINTX|=1<<3;
-		intr(0x16);
+			ep[0].UEINTX|=1<<3;
+			intr(0x16);
+		} else if(ret==2) {
+			ep[0].UEINTX|=1;
+		}
 	}
 }
 
