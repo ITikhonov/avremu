@@ -17,6 +17,7 @@
 
 static uint8_t UDINT; // 0xe1
 static uint8_t UENUM; // 0xe9
+static uint8_t UDADDR; // 0xe3
 
 static enum {SETUP,IN,OUT} usbpid;
 
@@ -52,11 +53,14 @@ static void sim_operate() {
 			printf("\n");
 
 			ep[0].UEINTX|=1<<3;
-			intr(0x16);
 		} else if(ret==2) {
 			ep[0].UEINTX|=1;
+		} else if(ret==3) {
+			ep[0].UEINTX|=1<<2;
 		}
 	}
+
+	if(getI() && (ep[0].UEINTX&ep[0].UEIENX)) { intr(0x16); }
 }
 
 static void sim_gfs_write() {
@@ -208,11 +212,12 @@ static void avr_IOWe2(uint8_t a,uint8_t x) {
         UDIEN=x;
 }
 
+static void avr_IOWe3(uint8_t a, uint8_t x) {
+	UDADDR=x;
+}
 
 int usb_poll(uint64_t d) {
-	if(getI() && ep[0].UEIENX&(1<<3)) {
-		sim_operate();
-	}
+	sim_operate();
 	return 0;
 }
 
@@ -223,6 +228,7 @@ void usb_init() {
 	ADD_IOW(e0);
 	ADD_IORW(e1);
 	ADD_IOW(e2);
+	ADD_IOW(e3);
 	ADD_IORW(e8);
 	ADD_IOW(e9);
 	ADD_IOW(ea);

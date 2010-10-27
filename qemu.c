@@ -61,6 +61,15 @@ void qemu_ack() {
 	}
 }
 
+
+void qemu_setaddr(uint8_t addr) {
+	uint8_t pkt[2]={0xfd,addr};
+        if(send(ep0.fd,&pkt,2,0)!=1) {
+		perror("QEMU device ack failed\n");
+		abort();
+	}
+}
+
 void qemu_write(uint8_t *buf, int len) {
     uint8_t pre=0;
     struct iovec io[2]={{&pre,1},{buf,len}};
@@ -82,12 +91,16 @@ int qemu_poll(uint64_t ns, uint8_t *r) {
 		char buf[1024];
 		int n=recv(ep0.fd,buf,1024,0);
 		if(n>0) {
+    			printf("QEMU recv %u bytes tag %u\n",n,buf[0]);
 			switch(buf[0]) {
 			case 0:
 				memcpy(r,buf+1,8);
 				return 1; //SETUP
 			case 1:
-				return 2; //IN
+				return 2|(buf[1]<<4); //IN
+			case 2:
+				memcpy(r,buf+2,n-2);
+				return 3|(buf[1]<<4); //OUT
 			default:
 				printf("unknown tag %hhu\n",buf[0]);
 				abort();

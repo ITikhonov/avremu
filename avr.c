@@ -529,6 +529,13 @@ int avr_STXP(uint16_t i) {
 	return 2;
 }
 
+int avr_STZP(uint16_t i) {
+	uint16_t a=reg16(0x1e);
+	setmem(a,reg(ARG_STZP_A));
+	setreg16(0x1e,a+1);
+	return 2;
+}
+
 int avr_PUSH(uint16_t i) {
 	uint16_t s=sp();
 	mem[s]=reg(ARG_PUSH_A);
@@ -576,8 +583,18 @@ int avr_LDS(uint16_t i) {
 
 int avr_ANDI(uint16_t i) {
 	uint8_t r;
-	int d=ARG_ANDI_B;
+	int d=ARG_ANDI_B+0x10;
 	setreg(d,r=reg(d)&ARG_ANDI_A);
+	setZ(r==0);
+	setNV(r&0x80,0);
+	return 1;
+}
+
+
+int avr_ORI(uint16_t i) {
+	uint8_t r;
+	int d=ARG_ORI_B+0x10;
+	setreg(d,r=reg(d)|ARG_ORI_A);
 	setZ(r==0);
 	setNV(r&0x80,0);
 	return 1;
@@ -726,13 +743,11 @@ int avr_ADIW(uint16_t i) {
 #define avr_LDZP avr_UNIMPL
 #define avr_LDX avr_UNIMPL
 #define avr_LDDZ avr_UNIMPL
-#define avr_STZP avr_UNIMPL
 #define avr_STX avr_UNIMPL
 #define avr_STY avr_UNIMPL
 #define avr_STZ avr_UNIMPL
 #define avr_STDY avr_UNIMPL
 #define avr_STDZ avr_UNIMPL
-#define avr_ORI avr_UNIMPL
 #define avr_LSR avr_UNIMPL
 #define avr_ROR avr_UNIMPL
 #define avr_STS16 avr_UNIMPL
