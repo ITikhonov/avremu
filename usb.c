@@ -41,8 +41,12 @@ static void sim_usb_initspeed() {
 
 
 static void sim_operate() {
-	int ret;
-	if((ret=qemu_poll(1,ep[0].fifo))) {
+	int ret,e;
+	if((ret=qemu_poll(1,ep[0].fifo,&e))) {
+		if(e>5) {
+			printf("We have only endpoints 0 to 5, but got %u\n",e);
+			abort();
+		}
 		if(ret==1) {
 			ep[0].fifoi=0;
 			usbpid=SETUP;
@@ -54,18 +58,26 @@ static void sim_operate() {
 
 			ep[0].UEINTX|=1<<3;
 		} else if(ret==2) {
-			ep[0].UEINTX|=1;
+			ep[e].UEINTX|=1;
 		} else if(ret==3) {
-			ep[0].UEINTX|=1<<2;
+			ep[e].UEINTX|=1<<2;
 		}
 	}
 
-	if(getI() && (ep[0].UEINTX&ep[0].UEIENX)) { intr(0x16); }
+	
+	if(getI()) {
+		if (ep[0].UEINTX&ep[0].UEIENX) { intr(0x16); return; }
+		if (ep[1].UEINTX&ep[1].UEIENX) { intr(0x16); return; }
+		if (ep[2].UEINTX&ep[2].UEIENX) { intr(0x16); return; }
+		if (ep[3].UEINTX&ep[3].UEIENX) { intr(0x16); return; }
+		if (ep[4].UEINTX&ep[4].UEIENX) { intr(0x16); return; }
+		if (ep[5].UEINTX&ep[5].UEIENX) { intr(0x16); return; }
+	}
 }
 
 static void sim_gfs_write() {
-	qemu_write(ep[0].fifo,ep[0].fifoi);
-	ep[0].fifoi=0;
+	qemu_write(ep[UENUM].fifo,ep[UENUM].fifoi);
+	ep[UENUM].fifoi=0;
 }
 
 static uint8_t avr_IORe1(uint8_t a) { return UDINT; }
@@ -152,17 +164,17 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 	rb0(7,x,"USB EP FIFOCON","ON","OFF");
 
 	if(!(x&(1<<3))) {
-		ep[0].fifoi=0;
+		ep[UENUM].fifoi=0;
 		if(usbpid!=IN) qemu_ack();
 	} else if(!(x&(1<<0))) {
 
 		int i;
-		printf("TX %u:",ep[0].fifoi);
-		for(i=0;i<ep[0].fifoi;i++) { printf(" %02x",ep[0].fifo[i]); }
+		printf("TX %u:",ep[UENUM].fifoi);
+		for(i=0;i<ep[UENUM].fifoi;i++) { printf(" %02x",ep[UENUM].fifo[i]); }
 		printf("\n");
 
 		sim_gfs_write();
-		ep[0].fifoi=0;
+		ep[UENUM].fifoi=0;
 	}
 }
 

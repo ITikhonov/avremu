@@ -33,3 +33,5 @@ dump.txt: decode.py blink_slow.bin
 
 disasm.txt: blink_slow.o
 	avr-objdump -z -D blink_slow.o | tail -25 > disasm.txt 
+
+qemu.o usb.o: qemu.h

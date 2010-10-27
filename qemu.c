@@ -83,7 +83,7 @@ void qemu_write(uint8_t *buf, int len) {
     }
 }
 
-int qemu_poll(uint64_t ns, uint8_t *r) {
+int qemu_poll(uint64_t ns, uint8_t *r, int *ep) {
 	struct timespec t={.tv_sec=0,.tv_nsec=ns};
 	int ret=ppoll(&ep0,1,&t,0);
 	if(ret<0) { perror("qemu ppoll"); }
@@ -95,12 +95,15 @@ int qemu_poll(uint64_t ns, uint8_t *r) {
 			switch(buf[0]) {
 			case 0:
 				memcpy(r,buf+1,8);
+				*ep=0;
 				return 1; //SETUP
 			case 1:
-				return 2|(buf[1]<<4); //IN
+				*ep=buf[1];
+				return 2;
 			case 2:
+				*ep=buf[1];
 				memcpy(r,buf+2,n-2);
-				return 3|(buf[1]<<4); //OUT
+				return 3;
 			default:
 				printf("unknown tag %hhu\n",buf[0]);
 				abort();
