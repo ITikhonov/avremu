@@ -52,6 +52,15 @@ void qemu_detach() {
 	}
 }
 
+
+void qemu_ack() {
+        uint8_t ack=0x0;
+        if(send(ep0.fd,&ack,1,0)!=1) {
+		perror("QEMU device ack failed\n");
+		abort();
+	}
+}
+
 void qemu_write(uint8_t *buf, int len) {
     uint8_t pre=0;
     struct iovec io[2]={{&pre,1},{buf,len}};
@@ -76,7 +85,9 @@ int qemu_poll(uint64_t ns, uint8_t *r) {
 			switch(buf[0]) {
 			case 0:
 				memcpy(r,buf+1,8);
-				return 1;
+				return 1; //SETUP
+			case 1:
+				return 2; //IN
 			default:
 				printf("unknown tag %hhu\n",buf[0]);
 				abort();

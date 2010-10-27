@@ -18,9 +18,7 @@
 static uint8_t UDINT; // 0xe1
 static uint8_t UENUM; // 0xe9
 
-uint8_t usbbuf[65535];
-int usbbufi=0;
-int usbwant=0;
+static enum {SETUP,IN,OUT} usbpid;
 
 static struct {
 	uint8_t UEINTX; // e8
@@ -42,11 +40,10 @@ static void sim_usb_initspeed() {
 
 
 static void sim_operate() {
-	if(qemu_poll(1,ep[0].fifo)) {
-		usbwant=ep[0].fifo[6]|(ep[0].fifo[7]<<8);
-		usbbufi=0;
-		printf("  USB SETUP ARRIVED FOR %u BYTES\n",usbwant);
+	int ret;
+	if((ret=qemu_poll(1,ep[0].fifo))) {
 		ep[0].fifoi=0;
+		if(ret==1) usbpid=SETUP;
 
 		int i;
 		printf("RX:");
@@ -59,43 +56,9 @@ static void sim_operate() {
 }
 
 static void sim_gfs_write() {
-	memcpy(usbbuf+usbbufi,ep[0].fifo,ep[0].fifoi);
-	usbbufi+=ep[0].fifoi;
-	printf("  GFS WRITE %u (%u of %u)\n",ep[0].fifoi,usbbufi,usbwant);
-
-	int usbsend;
-	if(usbbuf[1]==0x02) {
-		usbsend=usbbuf[2]|(usbbuf[3]<<8);
-	} else {
-		usbsend=usbbuf[0];
-	}
-
-	if(usbbufi>usbwant) {
-		printf("writing too many (%u, only need %u)\n",usbbufi,usbwant);
-		abort();
-	} else if(usbbufi==usbwant || usbbufi==usbsend) {
-		qemu_write(usbbuf,usbbufi);
-		usbbufi=0;
-		ep[0].fifoi=0;
-	} else {
-		ep[0].UEINTX|=1;
-		ep[0].fifoi=0;
-	}
-}
-
-#if 0
-
-static uint8_t pkt_setaddr[8]={0x00,0x05, 0x12,0x34, 0x00,0x00, 0x00,0x00};
-
-static void sim_usb_setaddr() {
-	printf("!! USB SETADDR\n");
-	ep[0].UEINTX|=1<<3;
-	memcpy(ep[0].fifo,pkt_setaddr,sizeof(pkt_setaddr));
+	qemu_write(ep[0].fifo,ep[0].fifoi);
 	ep[0].fifoi=0;
-
-	intr(0x16);
 }
-#endif
 
 static uint8_t avr_IORe1(uint8_t a) { return UDINT; }
 static void avr_IOWe1(uint8_t a, uint8_t x) { UDINT=x; }
@@ -180,8 +143,10 @@ static void avr_IOWe8(uint8_t a, uint8_t x) {
 	rb0(6,x,"USB EP NAKINI","ON","OFF");
 	rb0(7,x,"USB EP FIFOCON","ON","OFF");
 
-	if(!(x&(1<<3))) { ep[0].fifoi=0; }
-	else if(!(x&(1<<0))) {
+	if(!(x&(1<<3))) {
+		ep[0].fifoi=0;
+		if(usbpid!=IN) qemu_ack();
+	} else if(!(x&(1<<0))) {
 
 		int i;
 		printf("TX %u:",ep[0].fifoi);
